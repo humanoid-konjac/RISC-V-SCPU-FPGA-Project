@@ -1,0 +1,51 @@
+# macOS
+.DS_Store
+
+# Local references and conversion helpers
+ref/
+asm2coe/
+
+# Vivado generated state
+.Xil/
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.gen/
+*.jou
+*.log
+*.str
+*.backup.jou
+*.backup.log
+
+# Vivado build products
+*.bit
+*.bin
+*.ltx
+*.mcs
+*.prm
+*.rpt
+*.dcp
+*.mmi
+*.sysdef
+*.hwdef
+*.hwh
+*.xml
+usage_statistics_webtalk.*
+webtalk_*
+
+# Simulation outputs
+*.vcd
+*.fst
+*.out
+*.wdb
+transcript
+code/sim_out/
+
+# Editor and temporary files
+*~
+*.swp
+*.swo
+*.tmp
+*.bak
