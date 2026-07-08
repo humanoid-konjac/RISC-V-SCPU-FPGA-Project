@@ -24,6 +24,12 @@ module MIO_BUS(
     output reg [31:0] Peripheral_in
 );
 
+    wire addr_f;
+    wire counter_addr;
+
+    assign addr_f = (addr_bus[31:28] == 4'hf);
+    assign counter_addr = addr_f && (addr_bus[3:0] == 4'h4);
+
     always @(*) begin
         Cpu_data4bus = 32'b0;
         ram_data_in = 32'b0;
@@ -36,15 +42,16 @@ module MIO_BUS(
 
         case (addr_bus[31:28])
             4'b1111: begin
-                Cpu_data4bus = {14'b0, led_out, 2'b00};
+                Cpu_data4bus = counter_addr ? counter_out : {14'b0, led_out, 2'b00};
                 data_ram_we = 1'b0;
-                GPIOf0000000_we = mem_w;
+                GPIOf0000000_we = mem_w && !counter_addr;
+                counter_we = mem_w && counter_addr;
                 Peripheral_in = Cpu_data2bus;
             end
             4'b1110: begin
                 GPIOe0000000_we = mem_w;
                 Peripheral_in = Cpu_data2bus;
-                data_ram_we = mem_w;
+                data_ram_we = 1'b0;
                 Cpu_data4bus = {11'b0, BTN, SW};
             end
             default: begin
