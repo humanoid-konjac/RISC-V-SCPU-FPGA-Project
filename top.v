@@ -121,7 +121,7 @@ module top(
         .douta(douta)
     );
 
-    (* keep_hierarchy = "yes", dont_touch = "true" *) MIO_BUS U4_MIO_BUS(
+    MIO_BUS U4_MIO_BUS(
         .clk(clk),
         .rst(rst_i),
         .BTN(BTN_OK),
