@@ -7,11 +7,12 @@
 - `top.v`: FPGA 顶层，连接 CPU、ROM、RAM、外设总线、数码管、LED、按键和开关。
 - `code/`: 自写 CPU RTL，包括控制器、ALU、寄存器堆、PC/NPC、立即数扩展、访存控制等。
 - `IO/`: 板级 IO RTL，包括按键/开关输入处理、分频器、计数器。
-- `edf_file/`: 参考工程提供的 EDF 和 stub。当前仍使用 `MIO_BUS`、`Multi_8CH32`、`SSeg7`、`SPIO` 等模块。
+- `edf_file/`: 当前仍在工程中使用的参考工程文件，包括 `MIO_BUS`、`Multi_8CH32`、`SSeg7`、`SPIO` 等 IO/显示/总线模块。
+- `archive/`: 已从当前工程移出的旧参考文件，仅作备份归档，不参与综合、实现或仿真。
 - `coe/`: Vivado ROM/RAM IP 初始化文件。
 - `icf.xdc`: 管脚约束。
 
-`ref/` 和 `asm2coe/` 是本地参考/辅助内容，不进入 Git。
+`ref/`、`asm2coe/` 和 `tmp/` 是本地参考/辅助内容，不进入 Git。
 
 ## 顶层结构
 
