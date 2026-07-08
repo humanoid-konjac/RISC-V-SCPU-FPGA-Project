@@ -4,6 +4,7 @@
 # Local references and conversion helpers
 ref/
 asm2coe/
+tmp/
 
 # Vivado generated state
 .Xil/
