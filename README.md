@@ -8,7 +8,7 @@
 - `code/`: 自写 CPU RTL，包括控制器、ALU、寄存器堆、PC/NPC、立即数扩展、访存控制等。
 - `IO/`: 板级 IO RTL，包括按键/开关输入处理、分频器、计数器。
 - `edf_file/`: 当前仍在工程中使用的参考工程文件，包括 `MIO_BUS`、`Multi_8CH32`、`SSeg7`、`SPIO` 等 IO/显示/总线模块。
-- `archive/`: 已从当前工程移出的旧参考文件，仅作备份归档，不参与综合、实现或仿真。
+- `archive/`: 已从当前工程移出的旧参考文件，仅作备份归档，不参与综合、实现或仿真。归档文件统一使用 `.bak` 后缀，避免 Vivado 递归添加目录时把旧同名模块当作源文件读入。
 - `coe/`: Vivado ROM/RAM IP 初始化文件。
 - `icf.xdc`: 管脚约束。
 
@@ -50,6 +50,21 @@ dm_controller.Data_write_to_dm -> RAM_B.dina
 - 读数据：`douta[31:0]`
 
 切换 `.coe` 后，需要重新生成对应 IP 的 output products，然后重新综合、实现、生成 bitstream。
+
+## Vivado Source Set
+
+Vivado 工程中应只加入当前使用的源码/IP：
+
+- `top.v`
+- `code/*.v`
+- `IO/*.v`
+- `edf_file/MIO_BUS.V`
+- `edf_file/Multi_8CH32.v` 和 `edf_file/Multi_8CH32.edf`
+- `edf_file/SPIO.v` 和 `edf_file/SPIO.edf`
+- `edf_file/SSeg7.v` 和 `edf_file/SSeg7.edf`
+- `ROM_D`、`RAM_B` 两个 Vivado IP
+
+不要把 `archive/` 加入 Vivado source set。里面是旧的 `MIO_BUS`、`SCPU`、`dm_controller` 参考实现，只用于备份。
 
 ## `dm_controller`
 

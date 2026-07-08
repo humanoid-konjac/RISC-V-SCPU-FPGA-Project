@@ -50,3 +50,4 @@ code/sim_out/
 *.swo
 *.tmp
 *.bak
+!archive/*.bak

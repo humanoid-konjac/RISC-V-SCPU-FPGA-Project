@@ -26,9 +26,11 @@ module MIO_BUS(
 
     wire addr_f;
     wire counter_addr;
+    wire status_addr;
 
     assign addr_f = (addr_bus[31:28] == 4'hf);
     assign counter_addr = addr_f && (addr_bus[3:0] == 4'h4);
+    assign status_addr = addr_f && !(addr_bus[3] || addr_bus[1] || addr_bus[0]);
 
     always @(*) begin
         Cpu_data4bus = 32'b0;
@@ -42,7 +44,8 @@ module MIO_BUS(
 
         case (addr_bus[31:28])
             4'b1111: begin
-                Cpu_data4bus = counter_addr ? counter_out : {14'b0, led_out, 2'b00};
+                Cpu_data4bus = status_addr ? {counter0_out, counter1_out, counter2_out, led_out[12:0], SW}
+                                           : {14'b0, led_out, 2'b00};
                 data_ram_we = 1'b0;
                 GPIOf0000000_we = mem_w && !counter_addr;
                 counter_we = mem_w && counter_addr;
