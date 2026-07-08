@@ -121,7 +121,7 @@ module top(
         .douta(douta)
     );
 
-    MIO_BUS U4_MIO_BUS(
+    (* keep_hierarchy = "yes", dont_touch = "true" *) MIO_BUS U4_MIO_BUS(
         .clk(clk),
         .rst(rst_i),
         .BTN(BTN_OK),
@@ -130,7 +130,7 @@ module top(
         .mem_w(mem_w),
         .Cpu_data2bus(Data_out),
         .addr_bus(Addr_out),
-        .ram_data_out(douta),
+        .ram_data_out(32'b0),
         .led_out(LED_out),
         .counter_out(counter_out),
         .counter0_out(counter0_OUT),

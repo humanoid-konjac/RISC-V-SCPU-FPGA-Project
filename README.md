@@ -30,7 +30,7 @@ dm_controller.wea_mem   -> RAM_B.wea
 dm_controller.Data_write_to_dm -> RAM_B.dina
 ```
 
-普通数据 RAM 访问不经过 `MIO_BUS`。`MIO_BUS` 只负责外设译码、显示相关数据和外设读数据返回。
+普通数据 RAM 访问不经过 `MIO_BUS`。`MIO_BUS` 只负责外设译码、显示相关数据和外设读数据返回；`top.v` 中 `MIO_BUS.ram_data_out` 固定接 `32'b0`，避免把 RAM `douta` 额外扇出到 MIO。
 
 ## 存储器 IP 要求
 

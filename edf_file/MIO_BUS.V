@@ -1,3 +1,4 @@
+(* keep_hierarchy = "yes" *)
 module MIO_BUS(
     input clk,
     input rst,
@@ -58,7 +59,7 @@ module MIO_BUS(
                 Cpu_data4bus = {11'b0, BTN, SW};
             end
             default: begin
-                Cpu_data4bus = ram_data_out;
+                Cpu_data4bus = 32'b0;
                 ram_data_in = Cpu_data2bus;
                 ram_addr = addr_bus[11:2];
                 data_ram_we = mem_w;
