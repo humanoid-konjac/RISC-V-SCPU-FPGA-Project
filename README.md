@@ -41,7 +41,7 @@ dm_controller.Data_write_to_dm -> RAM_B.dina
 - `SW15 = 1` 时，数码管显示最近一次按下键的 `{8'h00, ASCII, 8'h00, scan_code}`。
 - `SW15 = 0` 时，保持原来的 CPU/IO 数码管显示路径。
 
-该测试只用于上板确认键盘连通性；后续游戏程序需要键盘输入时，可以复用 `IO/ps2_keyboard.v` 输出的扫描码接入 MMIO 或中断。
+该测试已在 NEXYS4 A7-100T 上板通过；后续游戏程序需要键盘输入时，可以复用 `IO/ps2_keyboard.v` 输出的扫描码接入 MMIO 或中断。
 
 ## CPU 实现
 
