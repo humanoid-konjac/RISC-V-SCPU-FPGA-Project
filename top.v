@@ -5,6 +5,8 @@ module top(
     input         rstn,
     input  [4:0] btn_i,
     input [15:0] sw_i,
+    input         ps2_clk,
+    input         ps2_data,
     output [15:0] led_o,
     output  [7:0] disp_an_o,
     output  [7:0] disp_seg_o
@@ -59,6 +61,10 @@ module top(
     wire [31:0] Disp_num;
     wire  [7:0] point_out;
     wire  [7:0] LE_out;
+    wire [31:0] keyboard_hex;
+    wire  [7:0] ps2_scan_code;
+    wire        ps2_scan_valid;
+    wire [31:0] display_hex;
 
     assign rst_i = ~rstn;
     assign IO_clk_i = ~clk;
@@ -68,6 +74,7 @@ module top(
     assign wea_mem = ram_access ? wea_mem_raw : 4'b0000;
     assign Data_in = ram_access ? Data_in_dm : Cpu_data4bus;
     assign cpu_en = Clk_CPU && !Clk_CPU_d;
+    assign display_hex = SW_OK[15] ? keyboard_hex : Disp_num;
 
     always @(posedge clk or posedge rst_i) begin
         if (rst_i)
@@ -177,12 +184,32 @@ module top(
         .Disp_num(Disp_num)
     );
 
+    ps2_keyboard U11_ps2_keyboard(
+        .clk(clk),
+        .rst(rst_i),
+        .ps2_clk(ps2_clk),
+        .ps2_data(ps2_data),
+        .scan_code(ps2_scan_code),
+        .scan_valid(ps2_scan_valid)
+    );
+
+    keyboard_display U12_keyboard_display(
+        .clk(clk),
+        .rst(rst_i),
+        .scan_code(ps2_scan_code),
+        .scan_valid(ps2_scan_valid),
+        .display_hex(keyboard_hex),
+        .last_scan_code(),
+        .last_ascii_code(),
+        .key_event()
+    );
+
     SSeg7 U6_SSeg7(
         .clk(clk),
         .rst(rst_i),
         .SW0(SW_OK[0]),
         .flash(clkdiv[10]),
-        .Hexs(Disp_num),
+        .Hexs(display_hex),
         .point(point_out),
         .LES(LE_out),
         .seg_an(disp_an_o),
