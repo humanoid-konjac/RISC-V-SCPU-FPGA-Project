@@ -169,6 +169,7 @@ module SCPU(
     reg [4:0]  mem_wb_rd;
     reg        mem_wb_regwrite;
     reg [1:0]  mem_wb_wdsel;
+    reg [31:0] mem_stage_load_data;
 
     wire [31:0] rf_rd1_raw;
     wire [31:0] rf_rd2_raw;
@@ -268,6 +269,13 @@ module SCPU(
     assign Addr_out = ex_mem_aluout;
     assign Data_out = ex_mem_store_data;
     assign dm_ctrl  = ex_mem_valid ? ex_mem_dm_ctrl : `dm_word;
+
+    always @(negedge clk or posedge reset) begin
+        if (reset)
+            mem_stage_load_data <= 32'b0;
+        else if (ex_mem_valid && (ex_mem_wdsel == `WDSel_FromMEM))
+            mem_stage_load_data <= Data_in;
+    end
 
     always @(posedge clk or posedge reset) begin
         if (reset) begin
@@ -395,7 +403,7 @@ module SCPU(
             ex_mem_dm_ctrl <= id_ex_dm_ctrl;
 
             mem_wb_valid <= ex_mem_valid;
-            mem_wb_mem_data <= Data_in;
+            mem_wb_mem_data <= mem_stage_load_data;
             mem_wb_aluout <= ex_mem_aluout;
             mem_wb_pc4 <= ex_mem_pc4;
             mem_wb_rd <= ex_mem_rd;

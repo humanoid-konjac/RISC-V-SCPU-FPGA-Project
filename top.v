@@ -62,7 +62,7 @@ module top(
     assign IO_clk_i = ~Clk_CPU;
     assign clka0_i = ~clk;
     assign CPU2IO = Peripheral_in;
-    assign ram_access = (Addr_out[31:28] != 4'he) && (Addr_out[31:28] != 4'hf);
+    assign ram_access = (Addr_out[31:12] == 20'h00000);
     assign wea_mem = ram_access ? wea_mem_raw : 4'b0000;
     assign Data_in = ram_access ? Data_in_dm : Cpu_data4bus;
 
