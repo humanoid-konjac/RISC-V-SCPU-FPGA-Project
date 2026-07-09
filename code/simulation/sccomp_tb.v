@@ -11,6 +11,7 @@ module sccomp_tb();
 
    integer foutput;
    integer counter;
+   integer done_wait;
    integer errors;
    integer init_i;
 
@@ -123,6 +124,7 @@ module sccomp_tb();
       rstn = 1'b1;
       reg_sel = 5'd0;
       counter = 0;
+      done_wait = -1;
       errors = 0;
 
       #5;
@@ -150,7 +152,12 @@ module sccomp_tb();
             $finish;
          end
 
-         if (U_SCCOMP.PC == DONE_PC) begin
+         if ((done_wait < 0) && (U_SCCOMP.PC == DONE_PC))
+            done_wait = 0;
+         else if (done_wait >= 0)
+            done_wait = done_wait + 1;
+
+         if (done_wait == 5) begin
             dump_regs();
             check_results();
 

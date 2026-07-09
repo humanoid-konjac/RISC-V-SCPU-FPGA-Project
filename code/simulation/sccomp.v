@@ -19,6 +19,7 @@ module sccomp(clk, rstn, reg_sel, reg_data);
    SCPU U_SCPU(
       .clk(clk),              // input: cpu clock
       .reset(rst),            // input: reset
+      .en(1'b1),              // advance every simulation clock
       .MIO_ready(1'b1),       // unused by this CPU
       .inst_in(instr),        // input: instruction
       .Data_in(dm_dout),      // input: data to cpu

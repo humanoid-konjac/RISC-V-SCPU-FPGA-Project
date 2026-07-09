@@ -43,6 +43,7 @@ webtalk_*
 *.wdb
 transcript
 code/sim_out/
+code/simulation/sim_out/
 
 # Editor and temporary files
 *~
