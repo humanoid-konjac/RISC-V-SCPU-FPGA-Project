@@ -17,7 +17,7 @@ module SCPU(
     output wire [2:0]  dm_ctrl,
     output wire [31:0] Data_out,
     output wire        CPU_MIO,    // Not used
-    input  wire        INT         // Not used
+    input  wire        INT
 );
     localparam [6:0] OP_RTYPE  = 7'b0110011;
     localparam [6:0] OP_ITYPE  = 7'b0010011;
@@ -26,10 +26,29 @@ module SCPU(
     localparam [6:0] OP_BRANCH = 7'b1100011;
     localparam [6:0] OP_JALR   = 7'b1100111;
     localparam [6:0] OP_JAL    = 7'b1101111;
+    localparam [6:0] OP_LUI    = 7'b0110111;
+    localparam [6:0] OP_AUIPC  = 7'b0010111;
+    localparam [6:0] OP_MISC   = 7'b0001111;
+    localparam [6:0] OP_SYSTEM = 7'b1110011;
+
+    localparam [11:0] CSR_MSTATUS = 12'h300;
+    localparam [11:0] CSR_MIE     = 12'h304;
+    localparam [11:0] CSR_MTVEC   = 12'h305;
+    localparam [11:0] CSR_MEPC    = 12'h341;
+    localparam [11:0] CSR_MCAUSE  = 12'h342;
+
+    localparam [31:0] TRAP_VECTOR_RESET = 32'h0000_0100;
+    localparam [31:0] MCAUSE_ILLEGAL    = 32'd2;
+    localparam [31:0] MCAUSE_ECALL_M    = 32'd11;
+    localparam [31:0] MCAUSE_TIMER_M    = 32'h8000_0007;
+
+    localparam MSTATUS_MIE_BIT  = 3;
+    localparam MSTATUS_MPIE_BIT = 7;
+    localparam MIE_MTIE_BIT     = 7;
 
     assign CPU_MIO = 1'b0;
 
-    wire _unused_inputs = &{1'b0, MIO_ready, INT};
+    wire _unused_inputs = &{1'b0, MIO_ready};
 
     function [31:0] branch_imm;
         input [31:0] inst;
@@ -92,18 +111,93 @@ module SCPU(
     wire [2:0]  id_dm_ctrl;
     wire [31:0] id_immout;
 
+    wire        id_is_rtype  = (id_op == OP_RTYPE);
+    wire        id_is_itype  = (id_op == OP_ITYPE);
     wire        id_is_branch = (id_op == OP_BRANCH);
     wire        id_is_jal    = (id_op == OP_JAL);
     wire        id_is_jalr   = (id_op == OP_JALR);
     wire        id_is_load   = (id_op == OP_LOAD);
     wire        id_is_store  = (id_op == OP_STORE);
+    wire        id_is_lui    = (id_op == OP_LUI);
+    wire        id_is_auipc  = (id_op == OP_AUIPC);
+    wire        id_is_system = (id_op == OP_SYSTEM);
+
+    wire [11:0] id_csr_addr = id_iimm;
+    wire [31:0] id_csr_zimm = {27'b0, id_rs1};
+    wire        id_csr_addr_ok = (id_csr_addr == CSR_MSTATUS) ||
+                                 (id_csr_addr == CSR_MIE) ||
+                                 (id_csr_addr == CSR_MTVEC) ||
+                                 (id_csr_addr == CSR_MEPC) ||
+                                 (id_csr_addr == CSR_MCAUSE);
+    wire        id_csr_funct_ok = (id_funct3 == 3'b001) ||
+                                  (id_funct3 == 3'b010) ||
+                                  (id_funct3 == 3'b011) ||
+                                  (id_funct3 == 3'b101) ||
+                                  (id_funct3 == 3'b110) ||
+                                  (id_funct3 == 3'b111);
+    wire        id_is_csr = id_is_system && id_csr_funct_ok && id_csr_addr_ok;
+    wire        id_csr_uses_uimm = id_funct3[2];
+    wire        id_csr_uses_rs1 = id_is_csr && !id_csr_uses_uimm && (id_rs1 != 5'd0);
+    wire        id_is_ecall = id_is_system && (if_id_inst == 32'h0000_0073);
+    wire        id_is_mret = id_is_system && (if_id_inst == 32'h3020_0073);
+    wire        id_is_fence = (id_op == OP_MISC) &&
+                              ((id_funct3 == 3'b000) || (id_funct3 == 3'b001));
+
+    wire        id_rtype_ok =
+        ((id_funct3 == 3'b000) && ((id_funct7 == 7'b0000000) ||
+                                   (id_funct7 == 7'b0100000))) ||
+        ((id_funct3 == 3'b001) && (id_funct7 == 7'b0000000)) ||
+        ((id_funct3 == 3'b010) && (id_funct7 == 7'b0000000)) ||
+        ((id_funct3 == 3'b011) && (id_funct7 == 7'b0000000)) ||
+        ((id_funct3 == 3'b100) && (id_funct7 == 7'b0000000)) ||
+        ((id_funct3 == 3'b101) && ((id_funct7 == 7'b0000000) ||
+                                   (id_funct7 == 7'b0100000))) ||
+        ((id_funct3 == 3'b110) && (id_funct7 == 7'b0000000)) ||
+        ((id_funct3 == 3'b111) && (id_funct7 == 7'b0000000));
+    wire        id_itype_ok =
+        (id_funct3 == 3'b000) ||
+        ((id_funct3 == 3'b001) && (id_funct7 == 7'b0000000)) ||
+        (id_funct3 == 3'b010) ||
+        (id_funct3 == 3'b011) ||
+        (id_funct3 == 3'b100) ||
+        ((id_funct3 == 3'b101) && ((id_funct7 == 7'b0000000) ||
+                                   (id_funct7 == 7'b0100000))) ||
+        (id_funct3 == 3'b110) ||
+        (id_funct3 == 3'b111);
+    wire        id_load_ok = (id_funct3 == 3'b000) ||
+                             (id_funct3 == 3'b001) ||
+                             (id_funct3 == 3'b010) ||
+                             (id_funct3 == 3'b100) ||
+                             (id_funct3 == 3'b101);
+    wire        id_store_ok = (id_funct3 == 3'b000) ||
+                              (id_funct3 == 3'b001) ||
+                              (id_funct3 == 3'b010);
+    wire        id_branch_ok = (id_funct3 == 3'b000) ||
+                               (id_funct3 == 3'b001) ||
+                               (id_funct3 == 3'b100) ||
+                               (id_funct3 == 3'b101) ||
+                               (id_funct3 == 3'b110) ||
+                               (id_funct3 == 3'b111);
+    wire        id_jalr_ok = (id_funct3 == 3'b000);
+    wire        id_system_ok = id_is_ecall || id_is_mret || id_is_csr;
+    wire        id_inst_ok =
+        (id_is_rtype && id_rtype_ok) ||
+        (id_is_itype && id_itype_ok) ||
+        (id_is_load && id_load_ok) ||
+        (id_is_store && id_store_ok) ||
+        (id_is_branch && id_branch_ok) ||
+        (id_is_jalr && id_jalr_ok) ||
+        id_is_jal || id_is_lui || id_is_auipc || id_is_fence || id_system_ok;
+    wire        id_illegal = !id_inst_ok;
+    wire        id_regwrite_eff = id_regwrite || id_is_csr;
+    wire [1:0]  id_wdsel_eff = id_is_csr ? `WDSel_FromALU : id_wdsel;
+
     wire        id_uses_rs1 = (id_op == OP_RTYPE) || (id_op == OP_ITYPE) ||
                               id_is_load || id_is_store || id_is_branch ||
-                              id_is_jalr;
+                              id_is_jalr || id_csr_uses_rs1;
     wire        id_uses_rs2 = (id_op == OP_RTYPE) || id_is_store ||
                               id_is_branch;
-    wire        _unused_id_decode = &{1'b0, id_npcop_unused, id_gprsel_unused,
-                                      id_is_jal};
+    wire        _unused_id_decode = &{1'b0, id_npcop_unused, id_gprsel_unused};
 
     ctrl U_ctrl(
         .Op(id_op),
@@ -152,6 +246,14 @@ module SCPU(
     reg        id_ex_is_branch;
     reg        id_ex_is_jal;
     reg        id_ex_is_jalr;
+    reg        id_ex_illegal;
+    reg        id_ex_is_ecall;
+    reg        id_ex_is_mret;
+    reg        id_ex_is_csr;
+    reg [2:0]  id_ex_csr_op;
+    reg [11:0] id_ex_csr_addr;
+    reg [31:0] id_ex_csr_zimm;
+    reg        id_ex_csr_uses_uimm;
 
     reg        ex_mem_valid;
     reg [31:0] ex_mem_aluout;
@@ -170,6 +272,17 @@ module SCPU(
     reg [4:0]  mem_wb_rd;
     reg        mem_wb_regwrite;
     reg [1:0]  mem_wb_wdsel;
+
+    reg [31:0] csr_mstatus;
+    reg [31:0] csr_mie;
+    reg [31:0] csr_mtvec;
+    reg [31:0] csr_mepc;
+    reg [31:0] csr_mcause;
+
+    reg int_sync0;
+    reg int_sync1;
+    reg int_sync1_d;
+    reg timer_irq_pending;
 
     wire [31:0] rf_rd1_raw;
     wire [31:0] rf_rd2_raw;
@@ -237,18 +350,61 @@ module SCPU(
     wire [31:0] ex_aluout;
     wire        ex_zero;
 
-    alu U_alu(
-        .A(ex_src_a),
-        .B(ex_alu_b),
+	    alu U_alu(
+	        .A(ex_src_a),
+	        .B(ex_alu_b),
         .ALUOp(id_ex_aluop),
         .C(ex_aluout),
         .Zero(ex_zero),
-        .PC(id_ex_pc)
-    );
+	        .PC(id_ex_pc)
+	    );
 
-    wire        ex_branch_taken = id_ex_is_branch && ex_zero;
-    wire [31:0] ex_pc_target = id_ex_pc + id_ex_imm;
-    wire [31:0] ex_jalr_sum = ex_src_a + id_ex_imm;
+    reg [31:0] ex_csr_read_data;
+    always @(*) begin
+        case (id_ex_csr_addr)
+            CSR_MSTATUS: ex_csr_read_data = csr_mstatus;
+            CSR_MIE:     ex_csr_read_data = csr_mie;
+            CSR_MTVEC:   ex_csr_read_data = csr_mtvec;
+            CSR_MEPC:    ex_csr_read_data = csr_mepc;
+            CSR_MCAUSE:  ex_csr_read_data = csr_mcause;
+            default:     ex_csr_read_data = 32'b0;
+        endcase
+    end
+
+    wire [31:0] ex_csr_src = id_ex_csr_uses_uimm ? id_ex_csr_zimm : ex_src_a;
+
+    reg [31:0] ex_csr_write_data;
+    reg        ex_csr_do_write;
+    always @(*) begin
+        ex_csr_write_data = ex_csr_read_data;
+        ex_csr_do_write = 1'b0;
+
+        case (id_ex_csr_op)
+            3'b001, 3'b101: begin
+                ex_csr_write_data = ex_csr_src;
+                ex_csr_do_write = 1'b1;
+            end
+
+            3'b010, 3'b110: begin
+                ex_csr_write_data = ex_csr_read_data | ex_csr_src;
+                ex_csr_do_write = (ex_csr_src != 32'b0);
+            end
+
+            3'b011, 3'b111: begin
+                ex_csr_write_data = ex_csr_read_data & ~ex_csr_src;
+                ex_csr_do_write = (ex_csr_src != 32'b0);
+            end
+
+            default: begin
+                ex_csr_write_data = ex_csr_read_data;
+                ex_csr_do_write = 1'b0;
+            end
+        endcase
+    end
+
+	    wire        ex_branch_taken = id_ex_is_branch && ex_zero;
+	    wire [31:0] ex_pc_target = id_ex_pc + id_ex_imm;
+	    wire [31:0] ex_jalr_sum = ex_src_a + id_ex_imm;
     wire [31:0] ex_jalr_target = {ex_jalr_sum[31:1], 1'b0};
     wire        ex_actual_taken = id_ex_is_jal || id_ex_is_jalr || ex_branch_taken;
     wire [31:0] ex_actual_target =
@@ -256,12 +412,45 @@ module SCPU(
         ((id_ex_is_jal || ex_branch_taken) ? ex_pc_target : id_ex_pc4);
     wire        ex_is_control = id_ex_valid &&
                                 (id_ex_is_branch || id_ex_is_jal || id_ex_is_jalr);
-    wire        ex_redirect = ex_is_control &&
-                              ((ex_actual_taken != id_ex_pred_taken) ||
-                               (ex_actual_target != id_ex_pred_target));
-    wire        load_use_stall = if_id_valid && id_ex_valid &&
-                                 (id_ex_wdsel == `WDSel_FromMEM) &&
-                                 id_ex_regwrite && (id_ex_rd != 5'd0) &&
+	    wire        ex_redirect = ex_is_control &&
+	                              ((ex_actual_taken != id_ex_pred_taken) ||
+	                               (ex_actual_target != id_ex_pred_target));
+    wire        timer_irq_enabled = timer_irq_pending &&
+                                    csr_mstatus[MSTATUS_MIE_BIT] &&
+                                    csr_mie[MIE_MTIE_BIT];
+    wire        ex_sync_trap = id_ex_valid &&
+                               (id_ex_illegal || id_ex_is_ecall);
+    wire        ex_timer_trap = id_ex_valid && !ex_sync_trap &&
+                                timer_irq_enabled;
+    wire        ex_take_trap = ex_sync_trap || ex_timer_trap;
+
+    reg [31:0] ex_trap_cause;
+    always @(*) begin
+        if (id_ex_illegal)
+            ex_trap_cause = MCAUSE_ILLEGAL;
+        else if (id_ex_is_ecall)
+            ex_trap_cause = MCAUSE_ECALL_M;
+        else
+            ex_trap_cause = MCAUSE_TIMER_M;
+    end
+
+    wire        ex_mret_redirect = id_ex_valid && id_ex_is_mret &&
+                                   !ex_take_trap;
+    wire        ex_pipeline_redirect = ex_take_trap || ex_mret_redirect ||
+                                       ex_redirect;
+    wire [31:0] ex_trap_target = {csr_mtvec[31:2], 2'b00};
+    wire [31:0] ex_redirect_target =
+        ex_take_trap ? ex_trap_target :
+        (ex_mret_redirect ? csr_mepc : ex_actual_target);
+    wire        ex_kill_current = ex_take_trap || ex_mret_redirect;
+    wire [31:0] ex_exec_result = id_ex_is_csr ? ex_csr_read_data :
+                                                ex_aluout;
+    wire        ex_csr_write_enable = id_ex_valid && id_ex_is_csr &&
+                                      ex_csr_do_write && !ex_take_trap;
+
+	    wire        load_use_stall = if_id_valid && id_ex_valid &&
+	                                 (id_ex_wdsel == `WDSel_FromMEM) &&
+	                                 id_ex_regwrite && (id_ex_rd != 5'd0) &&
                                  ((id_uses_rs1 && (id_ex_rd == id_rs1)) ||
                                   (id_uses_rs2 && (id_ex_rd == id_rs2)));
 
@@ -297,10 +486,18 @@ module SCPU(
             id_ex_aluop <= `ALUOp_nop;
             id_ex_alusrc <= 1'b0;
             id_ex_wdsel <= `WDSel_FromALU;
-            id_ex_dm_ctrl <= `dm_word;
-            id_ex_is_branch <= 1'b0;
-            id_ex_is_jal <= 1'b0;
-            id_ex_is_jalr <= 1'b0;
+	            id_ex_dm_ctrl <= `dm_word;
+	            id_ex_is_branch <= 1'b0;
+	            id_ex_is_jal <= 1'b0;
+	            id_ex_is_jalr <= 1'b0;
+                id_ex_illegal <= 1'b0;
+                id_ex_is_ecall <= 1'b0;
+                id_ex_is_mret <= 1'b0;
+                id_ex_is_csr <= 1'b0;
+                id_ex_csr_op <= 3'b0;
+                id_ex_csr_addr <= 12'b0;
+                id_ex_csr_zimm <= 32'b0;
+                id_ex_csr_uses_uimm <= 1'b0;
 
             ex_mem_valid <= 1'b0;
             ex_mem_aluout <= 32'b0;
@@ -316,18 +513,38 @@ module SCPU(
             mem_wb_mem_data <= 32'b0;
             mem_wb_aluout <= 32'b0;
             mem_wb_pc4 <= 32'b0;
-            mem_wb_rd <= 5'b0;
-            mem_wb_regwrite <= 1'b0;
-            mem_wb_wdsel <= `WDSel_FromALU;
-        end else if (en) begin
-            if (ex_redirect)
-                pc_reg <= ex_actual_target;
-            else if (!load_use_stall)
-                pc_reg <= if_pred_target;
+	            mem_wb_rd <= 5'b0;
+	            mem_wb_regwrite <= 1'b0;
+	            mem_wb_wdsel <= `WDSel_FromALU;
+                csr_mstatus <= 32'b0;
+                csr_mie <= 32'b0;
+                csr_mtvec <= TRAP_VECTOR_RESET;
+                csr_mepc <= 32'b0;
+                csr_mcause <= 32'b0;
+                int_sync0 <= 1'b0;
+                int_sync1 <= 1'b0;
+                int_sync1_d <= 1'b0;
+                timer_irq_pending <= 1'b0;
+	        end else begin
+                int_sync0 <= INT;
+                int_sync1 <= int_sync0;
+                int_sync1_d <= int_sync1;
 
-            if (ex_redirect) begin
-                if_id_valid <= 1'b0;
-                if_id_pc <= 32'b0;
+                if (int_sync1 && !int_sync1_d)
+                    timer_irq_pending <= 1'b1;
+
+                if (en && ex_timer_trap)
+                    timer_irq_pending <= 1'b0;
+
+                if (en) begin
+	            if (ex_pipeline_redirect)
+	                pc_reg <= ex_redirect_target;
+	            else if (!load_use_stall)
+	                pc_reg <= if_pred_target;
+
+	            if (ex_pipeline_redirect) begin
+	                if_id_valid <= 1'b0;
+	                if_id_pc <= 32'b0;
                 if_id_pc4 <= 32'b0;
                 if_id_inst <= 32'b0;
                 if_id_pred_taken <= 1'b0;
@@ -341,8 +558,8 @@ module SCPU(
                 if_id_pred_target <= if_pred_target;
             end
 
-            if (ex_redirect || load_use_stall) begin
-                id_ex_valid <= 1'b0;
+	            if (ex_pipeline_redirect || load_use_stall) begin
+	                id_ex_valid <= 1'b0;
                 id_ex_pc <= 32'b0;
                 id_ex_pc4 <= 32'b0;
                 id_ex_pred_taken <= 1'b0;
@@ -358,12 +575,20 @@ module SCPU(
                 id_ex_aluop <= `ALUOp_nop;
                 id_ex_alusrc <= 1'b0;
                 id_ex_wdsel <= `WDSel_FromALU;
-                id_ex_dm_ctrl <= `dm_word;
-                id_ex_is_branch <= 1'b0;
-                id_ex_is_jal <= 1'b0;
-                id_ex_is_jalr <= 1'b0;
-            end else begin
-                id_ex_valid <= if_id_valid;
+	                id_ex_dm_ctrl <= `dm_word;
+	                id_ex_is_branch <= 1'b0;
+	                id_ex_is_jal <= 1'b0;
+	                id_ex_is_jalr <= 1'b0;
+                    id_ex_illegal <= 1'b0;
+                    id_ex_is_ecall <= 1'b0;
+                    id_ex_is_mret <= 1'b0;
+                    id_ex_is_csr <= 1'b0;
+                    id_ex_csr_op <= 3'b0;
+                    id_ex_csr_addr <= 12'b0;
+                    id_ex_csr_zimm <= 32'b0;
+                    id_ex_csr_uses_uimm <= 1'b0;
+	            end else begin
+	                id_ex_valid <= if_id_valid;
                 id_ex_pc <= if_id_pc;
                 id_ex_pc4 <= if_id_pc4;
                 id_ex_pred_taken <= if_id_pred_taken;
@@ -374,36 +599,66 @@ module SCPU(
                 id_ex_rs1 <= id_rs1;
                 id_ex_rs2 <= id_rs2;
                 id_ex_rd <= id_rd;
-                id_ex_regwrite <= id_regwrite;
-                id_ex_memwrite <= id_memwrite;
-                id_ex_aluop <= id_aluop;
-                id_ex_alusrc <= id_alusrc;
-                id_ex_wdsel <= id_wdsel;
-                id_ex_dm_ctrl <= id_dm_ctrl;
-                id_ex_is_branch <= id_is_branch;
-                id_ex_is_jal <= id_is_jal;
-                id_ex_is_jalr <= id_is_jalr;
-            end
+	                id_ex_regwrite <= id_regwrite_eff;
+	                id_ex_memwrite <= id_memwrite;
+	                id_ex_aluop <= id_aluop;
+	                id_ex_alusrc <= id_alusrc;
+	                id_ex_wdsel <= id_wdsel_eff;
+	                id_ex_dm_ctrl <= id_dm_ctrl;
+	                id_ex_is_branch <= id_is_branch;
+	                id_ex_is_jal <= id_is_jal;
+	                id_ex_is_jalr <= id_is_jalr;
+                    id_ex_illegal <= id_illegal;
+                    id_ex_is_ecall <= id_is_ecall;
+                    id_ex_is_mret <= id_is_mret;
+                    id_ex_is_csr <= id_is_csr;
+                    id_ex_csr_op <= id_funct3;
+                    id_ex_csr_addr <= id_csr_addr;
+                    id_ex_csr_zimm <= id_csr_zimm;
+                    id_ex_csr_uses_uimm <= id_csr_uses_uimm;
+	            end
 
-            ex_mem_valid <= id_ex_valid;
-            ex_mem_aluout <= ex_aluout;
-            ex_mem_store_data <= ex_src_b_raw;
-            ex_mem_pc4 <= id_ex_pc4;
-            ex_mem_rd <= id_ex_rd;
-            ex_mem_regwrite <= id_ex_valid && id_ex_regwrite;
-            ex_mem_memwrite <= id_ex_valid && id_ex_memwrite;
-            ex_mem_wdsel <= id_ex_wdsel;
-            ex_mem_dm_ctrl <= id_ex_dm_ctrl;
+                if (ex_take_trap) begin
+                    csr_mepc <= id_ex_pc;
+                    csr_mcause <= ex_trap_cause;
+                    csr_mstatus[MSTATUS_MPIE_BIT] <= csr_mstatus[MSTATUS_MIE_BIT];
+                    csr_mstatus[MSTATUS_MIE_BIT] <= 1'b0;
+                end else if (ex_mret_redirect) begin
+                    csr_mstatus[MSTATUS_MIE_BIT] <= csr_mstatus[MSTATUS_MPIE_BIT];
+                    csr_mstatus[MSTATUS_MPIE_BIT] <= 1'b1;
+                end else if (ex_csr_write_enable) begin
+                    case (id_ex_csr_addr)
+                        CSR_MSTATUS: csr_mstatus <= ex_csr_write_data;
+                        CSR_MIE:     csr_mie <= ex_csr_write_data;
+                        CSR_MTVEC:   csr_mtvec <= {ex_csr_write_data[31:2], 2'b00};
+                        CSR_MEPC:    csr_mepc <= {ex_csr_write_data[31:2], 2'b00};
+                        CSR_MCAUSE:  csr_mcause <= ex_csr_write_data;
+                        default: begin
+                            csr_mstatus <= csr_mstatus;
+                        end
+                    endcase
+                end
+
+	            ex_mem_valid <= id_ex_valid && !ex_kill_current;
+	            ex_mem_aluout <= ex_exec_result;
+	            ex_mem_store_data <= ex_src_b_raw;
+	            ex_mem_pc4 <= id_ex_pc4;
+	            ex_mem_rd <= id_ex_rd;
+	            ex_mem_regwrite <= id_ex_valid && !ex_kill_current && id_ex_regwrite;
+	            ex_mem_memwrite <= id_ex_valid && !ex_kill_current && id_ex_memwrite;
+	            ex_mem_wdsel <= id_ex_wdsel;
+	            ex_mem_dm_ctrl <= id_ex_dm_ctrl;
 
             mem_wb_valid <= ex_mem_valid;
             mem_wb_mem_data <= Data_in;
             mem_wb_aluout <= ex_mem_aluout;
             mem_wb_pc4 <= ex_mem_pc4;
-            mem_wb_rd <= ex_mem_rd;
-            mem_wb_regwrite <= ex_mem_valid && ex_mem_regwrite;
-            mem_wb_wdsel <= ex_mem_wdsel;
-        end
-    end
+	            mem_wb_rd <= ex_mem_rd;
+	            mem_wb_regwrite <= ex_mem_valid && ex_mem_regwrite;
+	            mem_wb_wdsel <= ex_mem_wdsel;
+                end
+	        end
+	    end
 endmodule
 
 `default_nettype wire
