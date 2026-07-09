@@ -15,6 +15,7 @@ module top(
     wire clka0_i;
     wire Clk_CPU;
     wire cpu_en;
+    reg  Clk_CPU_d;
 
     wire  [4:0] BTN_OK;
     wire [15:0] SW_OK;
@@ -60,14 +61,20 @@ module top(
     wire  [7:0] LE_out;
 
     assign rst_i = ~rstn;
-    assign IO_clk_i = ~Clk_CPU;
+    assign IO_clk_i = ~clk;
     assign clka0_i = ~clk;
     assign CPU2IO = Peripheral_in;
     assign ram_access = (Addr_out[31:12] == 20'h00000);
     assign wea_mem = ram_access ? wea_mem_raw : 4'b0000;
     assign Data_in = ram_access ? Data_in_dm : Cpu_data4bus;
-    assign cpu_en = SW_OK[2] ? (!clkdiv[24] && (&clkdiv[23:0]))
-                             : (!clkdiv[3] && (&clkdiv[2:0]));
+    assign cpu_en = Clk_CPU && !Clk_CPU_d;
+
+    always @(posedge clk or posedge rst_i) begin
+        if (rst_i)
+            Clk_CPU_d <= 1'b0;
+        else
+            Clk_CPU_d <= Clk_CPU;
+    end
 
     Enter U10_Enter(
         .clk(clk),
