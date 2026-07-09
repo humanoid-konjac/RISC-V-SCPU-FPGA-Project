@@ -6,6 +6,7 @@
 module SCPU(
     input  wire        clk,
     input  wire        reset,
+    input  wire        en,
     input  wire        MIO_ready,  // Not used
     input  wire [31:0] inst_in,
     input  wire [31:0] Data_in,
@@ -169,7 +170,6 @@ module SCPU(
     reg [4:0]  mem_wb_rd;
     reg        mem_wb_regwrite;
     reg [1:0]  mem_wb_wdsel;
-    reg [31:0] mem_stage_load_data;
 
     wire [31:0] rf_rd1_raw;
     wire [31:0] rf_rd2_raw;
@@ -270,13 +270,6 @@ module SCPU(
     assign Data_out = ex_mem_store_data;
     assign dm_ctrl  = ex_mem_valid ? ex_mem_dm_ctrl : `dm_word;
 
-    always @(negedge clk or posedge reset) begin
-        if (reset)
-            mem_stage_load_data <= 32'b0;
-        else if (ex_mem_valid && (ex_mem_wdsel == `WDSel_FromMEM))
-            mem_stage_load_data <= Data_in;
-    end
-
     always @(posedge clk or posedge reset) begin
         if (reset) begin
             pc_reg <= 32'h0000_0000;
@@ -326,7 +319,7 @@ module SCPU(
             mem_wb_rd <= 5'b0;
             mem_wb_regwrite <= 1'b0;
             mem_wb_wdsel <= `WDSel_FromALU;
-        end else begin
+        end else if (en) begin
             if (ex_redirect)
                 pc_reg <= ex_actual_target;
             else if (!load_use_stall)
@@ -403,7 +396,7 @@ module SCPU(
             ex_mem_dm_ctrl <= id_ex_dm_ctrl;
 
             mem_wb_valid <= ex_mem_valid;
-            mem_wb_mem_data <= mem_stage_load_data;
+            mem_wb_mem_data <= Data_in;
             mem_wb_aluout <= ex_mem_aluout;
             mem_wb_pc4 <= ex_mem_pc4;
             mem_wb_rd <= ex_mem_rd;

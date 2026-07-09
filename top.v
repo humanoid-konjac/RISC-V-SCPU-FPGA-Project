@@ -14,6 +14,7 @@ module top(
     wire IO_clk_i;
     wire clka0_i;
     wire Clk_CPU;
+    wire cpu_en;
 
     wire  [4:0] BTN_OK;
     wire [15:0] SW_OK;
@@ -65,6 +66,8 @@ module top(
     assign ram_access = (Addr_out[31:12] == 20'h00000);
     assign wea_mem = ram_access ? wea_mem_raw : 4'b0000;
     assign Data_in = ram_access ? Data_in_dm : Cpu_data4bus;
+    assign cpu_en = SW_OK[2] ? (!clkdiv[24] && (&clkdiv[23:0]))
+                             : (!clkdiv[3] && (&clkdiv[2:0]));
 
     Enter U10_Enter(
         .clk(clk),
@@ -83,8 +86,9 @@ module top(
     );
 
     SCPU U1_SCPU(
-        .clk(Clk_CPU),
+        .clk(clk),
         .reset(rst_i),
+        .en(cpu_en),
         .MIO_ready(CPU_MIO),
         .inst_in(inst_in),
         .Data_in(Data_in),
