@@ -4,9 +4,9 @@
 
 ## 目录结构
 
-- `top.v`: FPGA 顶层，连接 CPU、ROM、RAM、外设总线、数码管、LED、按键和开关。
+- `top.v`: FPGA 顶层，连接 CPU、ROM、RAM、外设总线、数码管、LED、按键、开关、PS/2 键盘和 VGA。
 - `code/`: 自写 CPU RTL，包括五级流水线 CPU、控制器、ALU、寄存器堆、立即数扩展、访存控制等。
-- `IO/`: 板级 IO RTL，包括按键/开关输入处理、分频器、计数器和 PS/2 键盘接收。
+- `IO/`: 板级 IO RTL，包括按键/开关输入处理、分频器、计数器、PS/2 键盘接收和 VGA 测试显示。
 - `edf_file/`: 当前仍在工程中使用的参考工程文件，包括 `MIO_BUS`、`Multi_8CH32`、`SSeg7`、`SPIO` 等 IO/显示/总线模块。
 - `archive/`: 已从当前工程移出的旧参考文件，仅作备份归档，不参与综合、实现或仿真。归档文件统一使用 `.bak` 后缀，避免 Vivado 递归添加目录时把旧同名模块当作源文件读入。
 - `coe/`: Vivado ROM/RAM IP 初始化文件。
@@ -42,6 +42,28 @@ dm_controller.Data_write_to_dm -> RAM_B.dina
 - `SW15 = 0` 时，保持原来的 CPU/IO 数码管显示路径。
 
 该测试已在 NEXYS4 A7-100T 上板通过；后续游戏程序需要键盘输入时，可以复用 `IO/ps2_keyboard.v` 输出的扫描码接入 MMIO 或中断。
+
+## VGA 显示测试
+
+`top.v` 提供 VGA 直连测试输出，用于先验证显示器物理链路和键盘到画面的反馈：
+
+- 输出端口为 `vga_r[3:0]`、`vga_g[3:0]`、`vga_b[3:0]`、`vga_hs`、`vga_vs`。
+- 当前实现为纯 RTL `640x480@60Hz` 测试图，不经过 CPU、RAM 或 `MIO_BUS`。
+- 画面包含色条、白色边框和中心参考线，便于检查颜色顺序、同步和可视区域。
+- `SW14 = 1` 时叠加键盘控制方块，方向键或 WASD 可移动方块；`SW14 = 0` 时只显示固定测试图。
+- `SW15` 仍只控制数码管是否显示键盘值，不影响 VGA。
+
+VGA 管脚按 Digilent Nexys A7-100T master XDC 记录，兼容当前 Nexys4 A7-100T：
+
+```text
+vga_r[0..3] -> A3 B4 C5 A4
+vga_g[0..3] -> C6 A5 B6 A6
+vga_b[0..3] -> B7 C7 D7 D8
+vga_hs      -> B11
+vga_vs      -> B12
+```
+
+后续 C 语言小游戏显示建议在这条稳定 VGA 输出链路上扩展 tile/framebuffer/MMIO，不要先把完整显存设计和 VGA 物理调试混在一起。
 
 ## CPU 实现
 
@@ -87,6 +109,8 @@ Vivado 工程中应只加入当前使用的源码/IP：
 - `top.v`
 - `code/*.v`
 - `IO/*.v`
+  - VGA 新增文件：`IO/vga_timing.v`、`IO/keyboard_control.v`、`IO/vga_test_pattern.v`
+  - PS/2 键盘文件：`IO/ps2_keyboard.v`、`IO/keyboard_display.v`
 - `edf_file/MIO_BUS.V`
 - `edf_file/Multi_8CH32.v` 和 `edf_file/Multi_8CH32.edf`
 - `edf_file/SPIO.v` 和 `edf_file/SPIO.edf`
@@ -94,6 +118,8 @@ Vivado 工程中应只加入当前使用的源码/IP：
 - `ROM_D`、`RAM_B` 两个 Vivado IP
 
 不要把 `archive/` 加入 Vivado source set。里面是旧的 `MIO_BUS`、`SCPU`、`dm_controller` 参考实现，只用于备份。
+
+新增 VGA 测试不需要修改或重新生成 `ROM_D` / `RAM_B` IP；只有更换 `.coe` 时才需要重新生成对应 IP 的 output products。
 
 ## 版本标记
 

@@ -9,7 +9,12 @@ module top(
     input         ps2_data,
     output [15:0] led_o,
     output  [7:0] disp_an_o,
-    output  [7:0] disp_seg_o
+    output  [7:0] disp_seg_o,
+    output  [3:0] vga_r,
+    output  [3:0] vga_g,
+    output  [3:0] vga_b,
+    output        vga_hs,
+    output        vga_vs
 );
 
     wire rst_i;
@@ -65,6 +70,16 @@ module top(
     wire  [7:0] ps2_scan_code;
     wire        ps2_scan_valid;
     wire [31:0] display_hex;
+    wire        vga_pixel_tick;
+    wire  [9:0] vga_pixel_x;
+    wire  [9:0] vga_pixel_y;
+    wire        vga_active_video;
+    wire        move_up;
+    wire        move_down;
+    wire        move_left;
+    wire        move_right;
+    wire  [9:0] vga_sprite_x_unused;
+    wire  [9:0] vga_sprite_y_unused;
 
     assign rst_i = ~rstn;
     assign IO_clk_i = ~clk;
@@ -202,6 +217,48 @@ module top(
         .last_scan_code(),
         .last_ascii_code(),
         .key_event()
+    );
+
+    keyboard_control U13_keyboard_control(
+        .clk(clk),
+        .rst(rst_i),
+        .scan_code(ps2_scan_code),
+        .scan_valid(ps2_scan_valid),
+        .move_up(move_up),
+        .move_down(move_down),
+        .move_left(move_left),
+        .move_right(move_right)
+    );
+
+    vga_timing U14_vga_timing(
+        .clk(clk),
+        .rst(rst_i),
+        .pixel_tick(vga_pixel_tick),
+        .pixel_x(vga_pixel_x),
+        .pixel_y(vga_pixel_y),
+        .active_video(vga_active_video),
+        .frame_tick(),
+        .hsync(vga_hs),
+        .vsync(vga_vs)
+    );
+
+    vga_test_pattern U15_vga_test_pattern(
+        .clk(clk),
+        .rst(rst_i),
+        .pixel_tick(vga_pixel_tick),
+        .active_video(vga_active_video),
+        .pixel_x(vga_pixel_x),
+        .pixel_y(vga_pixel_y),
+        .enable_sprite(SW_OK[14]),
+        .move_up(move_up),
+        .move_down(move_down),
+        .move_left(move_left),
+        .move_right(move_right),
+        .vga_r(vga_r),
+        .vga_g(vga_g),
+        .vga_b(vga_b),
+        .sprite_x(vga_sprite_x_unused),
+        .sprite_y(vga_sprite_y_unused)
     );
 
     SSeg7 U6_SSeg7(
