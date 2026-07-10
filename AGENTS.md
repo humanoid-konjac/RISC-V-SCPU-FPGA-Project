@@ -27,7 +27,7 @@
 3. 在冒险流水线CPU上实现一个应用并显示效果，应用程序要求包含有实现的37条指令。（跳过，包含于后面的点）
 4. 在流水线CPU上实现三种单级中断/异常：异常指令、计数中断和系统调用syscall。（已经实现，待上板测试）
 5. 键盘连接后在数码管显示按键值的上板测试路径。（已经实现并上板测试通过）
-6. VGA 显示输出和键盘控制方块的上板测试路径。（已经实现，待上板测试）
+6. VGA 显示输出和键盘控制方块的上板测试路径。（已经实现并上板测试通过）
 7. 在流水线CPU上实现复杂的应用。（最终目标）
 
 ## 实现要求
@@ -109,6 +109,19 @@ vga_vs    -> B12
 - `SW14 = 1` 叠加键盘控制方块，方向键或 WASD 控制移动；`SW14 = 0` 只显示固定色条/边框/中心线。
 - 后续游戏建议复用这条 VGA 输出链路，再新增 tile/framebuffer/MMIO；键盘状态可通过 MMIO 或中断机制接入 CPU。
 
+### Vivado 导入清单
+
+设计源必须包含：
+
+- `top.v`
+- CPU：`code/SCPU.v`、`code/RF.v`、`code/ctrl.v`、`code/ctrl_encode_def.v`、`code/alu.v`、`code/EXT.v`、`code/dm_controller.v`
+- IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`
+- 外设：`edf_file/MIO_BUS.V`，以及 `edf_file/Multi_8CH32.v/.edf`、`edf_file/SPIO.v/.edf`、`edf_file/SSeg7.v/.edf`
+- 约束：只使用当前 `icf.xdc`
+- IP：保留现有 `ROM_D` 和 `RAM_B`，本次不修改或重新生成
+
+`code/simulation/*`、`code/dm.v`、`code/im.v` 只用于仿真；`archive/`、`ref/`、`asm2coe/`、`tmp/` 不加入 Vivado 工程。完成导入后设置顶层为 `top`，依次执行综合、实现和生成 bitstream。
+
 ### 流水线与时钟约束
 
 - `SCPU` 是 IF/ID、ID/EX、EX/MEM、MEM/WB 五级流水线。
@@ -134,6 +147,7 @@ vga_vs    -> B12
 
 - `single-cycle-v1`：流水线合并前的单周期版本。
 - `pipeline-v1`：通过板上 `testac.coe` 的五级流水线版本。
+- `interrupt-v1`：包含单级中断/异常、PS/2 键盘和 VGA 上板测试的当前版本。
 
 ### 修改原则
 

@@ -63,6 +63,8 @@ vga_hs      -> B11
 vga_vs      -> B12
 ```
 
+该测试已在 NEXYS4 A7-100T 上板通过：`SW14 = 0` 时显示器稳定显示色条和参考线，`SW14 = 1` 时方向键/WASD 可移动方块。
+
 后续 C 语言小游戏显示建议在这条稳定 VGA 输出链路上扩展 tile/framebuffer/MMIO，不要先把完整显存设计和 VGA 物理调试混在一起。
 
 ## CPU 实现
@@ -102,24 +104,30 @@ vga_vs      -> B12
 
 切换 `.coe` 后，需要重新生成对应 IP 的 output products，然后重新综合、实现、生成 bitstream。
 
-## Vivado Source Set
+## Vivado 导入与上板
 
-Vivado 工程中应只加入当前使用的源码/IP：
+在已有 Vivado 工程中，保留现有 `ROM_D`、`RAM_B` IP，执行 **Add Sources -> Add or Create Design Sources**，补齐下列文件；若文件已经存在于工程中，不要重复添加。
 
-- `top.v`
-- `code/*.v`
-- `IO/*.v`
-  - VGA 新增文件：`IO/vga_timing.v`、`IO/keyboard_control.v`、`IO/vga_test_pattern.v`
-  - PS/2 键盘文件：`IO/ps2_keyboard.v`、`IO/keyboard_display.v`
-- `edf_file/MIO_BUS.V`
-- `edf_file/Multi_8CH32.v` 和 `edf_file/Multi_8CH32.edf`
-- `edf_file/SPIO.v` 和 `edf_file/SPIO.edf`
-- `edf_file/SSeg7.v` 和 `edf_file/SSeg7.edf`
-- `ROM_D`、`RAM_B` 两个 Vivado IP
+1. 顶层：`top.v`，并在 **Settings -> General -> Top module name** 设为 `top`。
+2. CPU RTL：`code/SCPU.v`、`code/RF.v`、`code/ctrl.v`、`code/ctrl_encode_def.v`、`code/alu.v`、`code/EXT.v`、`code/dm_controller.v`。
+3. 板级 IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`。
+4. 参考外设模块：`edf_file/MIO_BUS.V`，以及 `edf_file/Multi_8CH32.v/.edf`、`edf_file/SPIO.v/.edf`、`edf_file/SSeg7.v/.edf`。
+5. 约束：在 **Add or Create Constraints** 中只加入当前的 `icf.xdc`，不要保留旧版或重复的 XDC。
+
+以下文件仅用于仿真，不加入 **Design Sources**：`code/simulation/*`、`code/dm.v`、`code/im.v`。`archive/`、`ref/`、`asm2coe/`、`tmp/` 也不加入工程。
+
+`ROM_D` 与 `RAM_B` 是已有 Vivado IP：本次键盘/VGA/中断更新不需要修改或重新生成它们。只有新建空工程或更换 `.coe` 时，才创建/更新 IP：
+
+- `ROM_D`：模块名 `ROM_D`，地址 `a[9:0]`，数据输出 `spo[31:0]`。
+- `RAM_B`：模块名 `RAM_B`，地址 `addra[9:0]`，数据 `dina/douta[31:0]`，字节写使能 `wea[3:0]`，时钟 `clka`。
+
+导入完成后依次运行 **Synthesis**、**Implementation**、**Generate Bitstream**。上板时接好 VGA 和 PS/2 键盘，下载 bitstream 后：
+
+- `SW14 = 0`：确认 VGA 色条、白色边框和中心线稳定显示。
+- `SW14 = 1`：用方向键或 WASD 移动 VGA 方块。
+- `SW15 = 1`：数码管显示最近一次键盘按下值；`SW15 = 0`：恢复原 CPU/IO 数码管显示。
 
 不要把 `archive/` 加入 Vivado source set。里面是旧的 `MIO_BUS`、`SCPU`、`dm_controller` 参考实现，只用于备份。
-
-新增 VGA 测试不需要修改或重新生成 `ROM_D` / `RAM_B` IP；只有更换 `.coe` 时才需要重新生成对应 IP 的 output products。
 
 ## 版本标记
 
