@@ -7,6 +7,7 @@ asm2coe/
 tmp/
 
 # Vivado generated state
+build/
 .Xil/
 *.cache/
 *.hw/
@@ -44,6 +45,12 @@ webtalk_*
 transcript
 code/sim_out/
 code/simulation/sim_out/
+
+# Local firmware build products (HEX/COE/listing remain inspectable artifacts)
+software/*.elf
+software/*.map
+__pycache__/
+*.pyc
 
 # Editor and temporary files
 *~

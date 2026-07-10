@@ -14,6 +14,8 @@ module MIO_BUS(
     input counter0_out,
     input counter1_out,
     input counter2_out,
+    input [31:0] mic_data_out,
+    input [31:0] video_data_out,
 
     output reg [31:0] Cpu_data4bus,
     output reg [31:0] ram_data_in,
@@ -22,6 +24,8 @@ module MIO_BUS(
     output reg GPIOf0000000_we,
     output reg GPIOe0000000_we,
     output reg counter_we,
+    output reg mic_we,
+    output reg video_we,
     output reg [31:0] Peripheral_in
 );
 
@@ -41,9 +45,21 @@ module MIO_BUS(
         GPIOf0000000_we = 1'b0;
         GPIOe0000000_we = 1'b0;
         counter_we = 1'b0;
+        mic_we = 1'b0;
+        video_we = 1'b0;
         Peripheral_in = 32'b0;
 
         case (addr_bus[31:28])
+            4'b1100: begin
+                Cpu_data4bus = video_data_out;
+                video_we = mem_w;
+                Peripheral_in = Cpu_data2bus;
+            end
+            4'b1101: begin
+                Cpu_data4bus = mic_data_out;
+                mic_we = mem_w;
+                Peripheral_in = Cpu_data2bus;
+            end
             4'b1111: begin
                 Cpu_data4bus = status_addr ? {counter0_out, counter1_out, counter2_out, led_out[12:0], SW}
                                            : {14'b0, led_out, 2'b00};

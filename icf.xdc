@@ -70,6 +70,12 @@ set_property -dict { PACKAGE_PIN P18   IOSTANDARD LVCMOS33 } [get_ports { btn_i[
 set_property -dict { PACKAGE_PIN F4 IOSTANDARD LVCMOS33 PULLUP true } [get_ports { ps2_clk }];  #Sch=ps2_clk
 set_property -dict { PACKAGE_PIN B2 IOSTANDARD LVCMOS33 PULLUP true } [get_ports { ps2_data }]; #Sch=ps2_data
 
+# On-board ADMP421 PDM microphone, Nexys4 DDR / Nexys A7-100T
+set_property -dict { PACKAGE_PIN J5 IOSTANDARD LVCMOS33 } [get_ports { mic_clk }];   #Sch=m_clk
+set_property -dict { PACKAGE_PIN H5 IOSTANDARD LVCMOS33 } [get_ports { mic_data }];  #Sch=m_data
+set_property -dict { PACKAGE_PIN F5 IOSTANDARD LVCMOS33 } [get_ports { mic_lrsel }]; #Sch=m_lrsel
+set_false_path -from [get_ports { mic_data }]; #Input is captured by a two-flop synchronizer
+
 # VGA connector, Nexys4 A7-100T / Nexys A7-100T
 set_property -dict { PACKAGE_PIN A3 IOSTANDARD LVCMOS33 } [get_ports { vga_r[0] }]; #Sch=vga_r[0]
 set_property -dict { PACKAGE_PIN B4 IOSTANDARD LVCMOS33 } [get_ports { vga_r[1] }]; #Sch=vga_r[1]

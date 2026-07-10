@@ -10,6 +10,7 @@ module vga_keyboard_tb();
    wire       k_move_down;
    wire       k_move_left;
    wire       k_move_right;
+   wire       k_jump;
 
    reg        pixel_tick;
    reg        active_video;
@@ -37,7 +38,8 @@ module vga_keyboard_tb();
       .move_up(k_move_up),
       .move_down(k_move_down),
       .move_left(k_move_left),
-      .move_right(k_move_right)
+      .move_right(k_move_right),
+      .jump(k_jump)
    );
 
    vga_test_pattern U_VGA_TEST_PATTERN(
@@ -177,6 +179,19 @@ module vga_keyboard_tb();
 
       send_scan(8'h1d);
       check1("W move", k_move_up, 1'b1);
+      check1("W jump", k_jump, 1'b1);
+      send_scan(8'h1d);
+      check1("W typematic still moves", k_move_up, 1'b1);
+      check1("W typematic jump ignored", k_jump, 1'b0);
+      send_scan(8'hf0);
+      send_scan(8'h1d);
+      check1("W break ignored", k_move_up, 1'b0);
+      check1("W break jump ignored", k_jump, 1'b0);
+      send_scan(8'h1d);
+      check1("W press after release", k_move_up, 1'b1);
+      check1("W jump after release", k_jump, 1'b1);
+      send_scan(8'h29);
+      check1("space jump", k_jump, 1'b1);
       send_scan(8'h1b);
       check1("S move", k_move_down, 1'b1);
       send_scan(8'h1c);

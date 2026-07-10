@@ -1,0 +1,150 @@
+
+voice_game.elf:     file format elf32-littleriscv
+
+
+Disassembly of section .text:
+
+00000000 <_start>:
+   0:	40000113          	addi	x2,x0,1024
+   4:	008000ef          	jal	x1,c <game_main>
+   8:	0000006f          	jal	x0,8 <_start+0x8>
+
+0000000c <game_main>:
+   c:	fd010113          	addi	x2,x2,-48
+  10:	02812623          	sw	x8,44(x2)
+  14:	02912423          	sw	x9,40(x2)
+  18:	03212223          	sw	x18,36(x2)
+  1c:	01412e23          	sw	x20,28(x2)
+  20:	01512c23          	sw	x21,24(x2)
+  24:	01612a23          	sw	x22,20(x2)
+  28:	01712823          	sw	x23,16(x2)
+  2c:	01812623          	sw	x24,12(x2)
+  30:	01912423          	sw	x25,8(x2)
+  34:	01a12223          	sw	x26,4(x2)
+  38:	03312023          	sw	x19,32(x2)
+  3c:	01b12023          	sw	x27,0(x2)
+  40:	d00007b7          	lui	x15,0xd0000
+  44:	00100293          	addi	x5,x0,1
+  48:	c00003b7          	lui	x7,0xc0000
+  4c:	0057a023          	sw	x5,0(x15) # d0000000 <__rom_end+0xcffffdcc>
+  50:	00300613          	addi	x12,x0,3
+  54:	00c3a023          	sw	x12,0(x7) # c0000000 <__rom_end+0xbffffdcc>
+  58:	0e000713          	addi	x14,x0,224
+  5c:	00e3a223          	sw	x14,4(x7)
+  60:	26c00693          	addi	x13,x0,620
+  64:	00d3a423          	sw	x13,8(x7)
+  68:	0f000793          	addi	x15,x0,240
+  6c:	00f3a623          	sw	x15,12(x7)
+  70:	0003a823          	sw	x0,16(x7)
+  74:	01438413          	addi	x8,x7,20
+  78:	00c3ac23          	sw	x12,24(x7)
+  7c:	00042903          	lw	x18,0(x8)
+  80:	d00004b7          	lui	x9,0xd0000
+  84:	00438f93          	addi	x31,x7,4
+  88:	00838f13          	addi	x30,x7,8
+  8c:	00c38e93          	addi	x29,x7,12
+  90:	01038313          	addi	x6,x7,16
+  94:	01838893          	addi	x17,x7,24
+  98:	00000513          	addi	x10,x0,0
+  9c:	00000813          	addi	x16,x0,0
+  a0:	00000e13          	addi	x28,x0,0
+  a4:	00060593          	addi	x11,x12,0
+  a8:	00448493          	addi	x9,x9,4 # d0000004 <__rom_end+0xcffffdd0>
+  ac:	1a300a13          	addi	x20,x0,419
+  b0:	00060a93          	addi	x21,x12,0
+  b4:	00078b13          	addi	x22,x15,0
+  b8:	04e00b93          	addi	x23,x0,78
+  bc:	00200c13          	addi	x24,x0,2
+  c0:	00070c93          	addi	x25,x14,0
+  c4:	00068d13          	addi	x26,x13,0
+  c8:	00042983          	lw	x19,0(x8)
+  cc:	ff390ee3          	beq	x18,x19,c8 <game_main+0xbc>
+  d0:	0004a903          	lw	x18,0(x9)
+  d4:	00297913          	andi	x18,x18,2
+  d8:	04090663          	beq	x18,x0,124 <game_main+0x118>
+  dc:	0184a023          	sw	x24,0(x9)
+  e0:	06558a63          	beq	x11,x5,154 <game_main+0x148>
+  e4:	0053a023          	sw	x5,0(x7)
+  e8:	019fa023          	sw	x25,0(x31)
+  ec:	01af2023          	sw	x26,0(x30)
+  f0:	016ea023          	sw	x22,0(x29)
+  f4:	00032023          	sw	x0,0(x6)
+  f8:	0158a023          	sw	x21,0(x17)
+  fc:	0f000793          	addi	x15,x0,240
+ 100:	26c00693          	addi	x13,x0,620
+ 104:	00000513          	addi	x10,x0,0
+ 108:	0e000713          	addi	x14,x0,224
+ 10c:	00000813          	addi	x16,x0,0
+ 110:	00300613          	addi	x12,x0,3
+ 114:	00000e13          	addi	x28,x0,0
+ 118:	00100593          	addi	x11,x0,1
+ 11c:	00098913          	addi	x18,x19,0
+ 120:	fa9ff06f          	jal	x0,c8 <game_main+0xbc>
+ 124:	02558a63          	beq	x11,x5,158 <game_main+0x14c>
+ 128:	0153a023          	sw	x21,0(x7)
+ 12c:	00efa023          	sw	x14,0(x31)
+ 130:	00df2023          	sw	x13,0(x30)
+ 134:	010035b3          	sltu	x11,x0,x16
+ 138:	00fea023          	sw	x15,0(x29)
+ 13c:	00859593          	slli	x11,x11,0x8
+ 140:	00c5e5b3          	or	x11,x11,x12
+ 144:	01c32023          	sw	x28,0(x6)
+ 148:	00b8a023          	sw	x11,0(x17)
+ 14c:	00300593          	addi	x11,x0,3
+ 150:	fcdff06f          	jal	x0,11c <game_main+0x110>
+ 154:	ff600513          	addi	x10,x0,-10
+ 158:	010035b3          	sltu	x11,x0,x16
+ 15c:	40b80833          	sub	x16,x16,x11
+ 160:	00150513          	addi	x10,x10,1
+ 164:	00800593          	addi	x11,x0,8
+ 168:	00a5d463          	bge	x11,x10,170 <game_main+0x164>
+ 16c:	00058513          	addi	x10,x11,0
+ 170:	ffe68693          	addi	x13,x13,-2
+ 174:	00a70733          	add	x14,x14,x10
+ 178:	0206d063          	bge	x13,x0,198 <game_main+0x18c>
+ 17c:	001e0e13          	addi	x28,x28,1
+ 180:	003e7693          	andi	x13,x28,3
+ 184:	00569793          	slli	x15,x13,0x5
+ 188:	0a078793          	addi	x15,x15,160
+ 18c:	00369693          	slli	x13,x13,0x3
+ 190:	00d787b3          	add	x15,x15,x13
+ 194:	28000693          	addi	x13,x0,640
+ 198:	02080a63          	beq	x16,x0,1cc <game_main+0x1c0>
+ 19c:	06ea6a63          	bltu	x20,x14,210 <game_main+0x204>
+ 1a0:	00100593          	addi	x11,x0,1
+ 1a4:	00b3a023          	sw	x11,0(x7)
+ 1a8:	00efa023          	sw	x14,0(x31)
+ 1ac:	00df2023          	sw	x13,0(x30)
+ 1b0:	01003933          	sltu	x18,x0,x16
+ 1b4:	00fea023          	sw	x15,0(x29)
+ 1b8:	00891913          	slli	x18,x18,0x8
+ 1bc:	01c32023          	sw	x28,0(x6)
+ 1c0:	00c96933          	or	x18,x18,x12
+ 1c4:	0128a023          	sw	x18,0(x17)
+ 1c8:	f55ff06f          	jal	x0,11c <game_main+0x110>
+ 1cc:	02ea6263          	bltu	x20,x14,1f0 <game_main+0x1e4>
+ 1d0:	fa368913          	addi	x18,x13,-93
+ 1d4:	00100593          	addi	x11,x0,1
+ 1d8:	fd2be6e3          	bltu	x23,x18,1a4 <game_main+0x198>
+ 1dc:	00470913          	addi	x18,x14,4
+ 1e0:	fb078d93          	addi	x27,x15,-80
+ 1e4:	01b94663          	blt	x18,x27,1f0 <game_main+0x1e4>
+ 1e8:	03c78913          	addi	x18,x15,60
+ 1ec:	fae95ce3          	bge	x18,x14,1a4 <game_main+0x198>
+ 1f0:	02c2fa63          	bgeu	x5,x12,224 <game_main+0x218>
+ 1f4:	fff60613          	addi	x12,x12,-1
+ 1f8:	0f000793          	addi	x15,x0,240
+ 1fc:	26c00693          	addi	x13,x0,620
+ 200:	00000513          	addi	x10,x0,0
+ 204:	0e000713          	addi	x14,x0,224
+ 208:	03c00813          	addi	x16,x0,60
+ 20c:	f95ff06f          	jal	x0,1a0 <game_main+0x194>
+ 210:	0f000793          	addi	x15,x0,240
+ 214:	26c00693          	addi	x13,x0,620
+ 218:	00000513          	addi	x10,x0,0
+ 21c:	0e000713          	addi	x14,x0,224
+ 220:	f81ff06f          	jal	x0,1a0 <game_main+0x194>
+ 224:	00000613          	addi	x12,x0,0
+ 228:	00000513          	addi	x10,x0,0
+ 22c:	00300593          	addi	x11,x0,3
+ 230:	f75ff06f          	jal	x0,1a4 <game_main+0x198>
