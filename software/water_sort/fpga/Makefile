@@ -38,7 +38,7 @@ $(BUILD_DIR)/isa_coverage.o: isa_coverage.S | $(BUILD_DIR)
 $(BUILD_DIR)/game_main.o: game_main.c mmio.h ../water_sort.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I.. -c $< -o $@
 
-$(BUILD_DIR)/water_sort.o: ../water_sort.c ../water_sort.h | $(BUILD_DIR)
+$(BUILD_DIR)/water_sort.o: ../water_sort.c ../water_sort.h ../level_catalog.h | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I.. -c $< -o $@
 
 $(ELF): $(BUILD_DIR)/startup.o $(BUILD_DIR)/isa_coverage.o \

@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static void verify_generated(WaterSortDifficulty difficulty, uint32_t seed)
+static void verify_level(WaterSortDifficulty difficulty, uint8_t level)
 {
     WaterSortGame a;
     WaterSortGame b;
@@ -18,12 +18,13 @@ static void verify_generated(WaterSortDifficulty difficulty, uint32_t seed)
     uint8_t tube;
     uint8_t layer;
 
-    water_sort_start(&a, difficulty, seed);
-    water_sort_start(&b, difficulty, seed);
+    water_sort_start(&a, difficulty, level);
+    water_sort_start(&b, difficulty, level);
     assert(memcmp(a.tube, b.tube, sizeof(a.tube)) == 0);
     assert(a.tube_count == expected_tubes);
     assert(a.color_count == expected_colors);
-    assert(a.seed == seed);
+    assert(a.level == level);
+    assert(water_sort_level_min_moves(difficulty, level) != 0);
     assert(!a.finished && !water_sort_is_solved(&a));
     for (tube = 0; tube < a.tube_count; ++tube) {
         if (a.height[tube] == 0) {
@@ -73,14 +74,20 @@ static int make_first_legal_move(WaterSortGame *game)
 
 static void test_generation(void)
 {
-    uint32_t seed;
+    uint8_t level;
     int difficulty;
     for (difficulty = WATER_SORT_EASY; difficulty <= WATER_SORT_HARD;
          ++difficulty) {
-        for (seed = 0; seed < 10000; ++seed)
-            verify_generated((WaterSortDifficulty)difficulty,
-                             seed * 2654435761u);
-        verify_generated((WaterSortDifficulty)difficulty, 0xffffffffu);
+        WaterSortGame previous;
+        for (level = 0; level < WATER_SORT_LEVEL_COUNT; ++level) {
+            WaterSortGame current;
+            verify_level((WaterSortDifficulty)difficulty, level);
+            water_sort_start(&current, (WaterSortDifficulty)difficulty, level);
+            if (level != 0)
+                assert(memcmp(current.tube, previous.tube,
+                              sizeof(current.tube)) != 0);
+            previous = current;
+        }
     }
 }
 
@@ -90,7 +97,7 @@ static void test_cursor_restart_and_undo(void)
     WaterSortGame initial;
     unsigned moves = 0;
 
-    water_sort_start(&game, WATER_SORT_HARD, 1234567890u);
+    water_sort_start(&game, WATER_SORT_HARD, 11);
     initial = game;
     water_sort_move_cursor(&game, -1);
     assert(game.cursor == game.tube_count - 1);
@@ -139,6 +146,6 @@ int main(void)
     test_generation();
     test_cursor_restart_and_undo();
     test_history_full();
-    puts("water_sort tests passed (30003 seeded levels)");
+    puts("water_sort tests passed (36 solver-verified levels)");
     return 0;
 }

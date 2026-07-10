@@ -61,8 +61,7 @@ module top(
     wire [31:0] game_active_ui;
     wire [31:0] game_active_move_count;
     wire [31:0] game_active_meta;
-    wire [31:0] game_active_seed_lo;
-    wire [31:0] game_active_seed_hi;
+    wire [31:0] game_active_level;
 
     wire [15:0] LED_out;
     wire        GPIOf0000000_we;
@@ -286,8 +285,7 @@ module top(
         .active_ui(game_active_ui),
         .active_move_count(game_active_move_count),
         .active_meta(game_active_meta),
-        .active_seed_lo(game_active_seed_lo),
-        .active_seed_hi(game_active_seed_hi)
+        .active_level(game_active_level)
     );
 
     vga_timing U14_vga_timing(
@@ -331,8 +329,7 @@ module top(
         .active_tubes(game_active_tubes),
         .active_ui(game_active_ui),
         .active_meta(game_active_meta),
-        .active_seed_lo(game_active_seed_lo),
-        .active_seed_hi(game_active_seed_hi),
+        .active_level(game_active_level),
         .vga_r(game_vga_r),
         .vga_g(game_vga_g),
         .vga_b(game_vga_b)

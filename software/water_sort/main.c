@@ -13,7 +13,7 @@ static void print_game(const WaterSortGame *game)
     }
     for (tube = 0; tube < game->tube_count; ++tube)
         printf(game->cursor == tube ? " ^ " : "   ");
-    printf("\nseed=%u moves=%u\n", (unsigned)game->seed,
+    printf("\nlevel=%u moves=%u\n", (unsigned)game->level + 1,
            (unsigned)game->move_count);
 }
 
@@ -21,7 +21,7 @@ int main(void)
 {
     WaterSortGame game;
     int command;
-    water_sort_start(&game, WATER_SORT_NORMAL, 1);
+    water_sort_start(&game, WATER_SORT_NORMAL, 0);
     puts("a/d move, e confirm, c cancel, u undo, r restart, q quit");
     for (;;) {
         print_game(&game);

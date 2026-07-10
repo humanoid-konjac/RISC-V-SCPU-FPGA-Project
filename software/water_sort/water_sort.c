@@ -1,40 +1,5 @@
 #include "water_sort.h"
-
-/* Bottom-to-top layouts.  Each template has a host-tested legal solution.
- * Seeded color/tube permutations preserve that solution while producing a
- * large deterministic family without a solver in the 4 KiB firmware. */
-static const uint8_t easy_template[8][4] = {
-    {1, 2, 1, 2}, {2, 1, 2, 1}, {3, 4, 3, 4}, {4, 3, 4, 3},
-    {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}
-};
-
-static const uint8_t normal_template[8][4] = {
-    {1, 2, 1, 2}, {2, 1, 2, 1}, {3, 4, 3, 4}, {4, 3, 4, 3},
-    {5, 6, 5, 6}, {6, 5, 6, 5}, {0, 0, 0, 0}, {0, 0, 0, 0}
-};
-
-static const uint8_t hard_template[8][4] = {
-    {2, 4, 6, 7}, {6, 3, 1, 4}, {3, 5, 7, 3}, {2, 1, 3, 5},
-    {5, 7, 6, 4}, {2, 1, 2, 6}, {5, 4, 7, 1}, {0, 0, 0, 0}
-};
-
-static uint32_t prng_next(uint32_t *state)
-{
-    uint32_t value = *state;
-    value ^= value << 13;
-    value ^= value >> 17;
-    value ^= value << 5;
-    *state = value;
-    return value;
-}
-
-static uint8_t bounded_byte(uint32_t value, uint8_t limit)
-{
-    uint8_t result = (uint8_t)value;
-    while (result >= limit)
-        result = (uint8_t)(result - limit);
-    return result;
-}
+#include "level_catalog.h"
 
 static void clear_board(WaterSortGame *game)
 {
@@ -66,72 +31,29 @@ static void set_configuration(WaterSortGame *game,
     }
 }
 
-static const uint8_t (*select_template(WaterSortDifficulty difficulty))[4]
+static void load_level(WaterSortGame *game)
 {
-    if (difficulty == WATER_SORT_EASY)
-        return easy_template;
-    if (difficulty == WATER_SORT_HARD)
-        return hard_template;
-    return normal_template;
-}
-
-static void generate_board(WaterSortGame *game)
-{
-    const uint8_t (*layout)[4] = select_template(game->difficulty);
-    uint8_t color_map[WATER_SORT_MAX_COLORS + 1];
-    uint8_t tube_map[WATER_SORT_MAX_TUBES];
-    uint32_t difficulty_salt = game->difficulty == WATER_SORT_EASY ?
-                               0x243f6a88u :
-                               game->difficulty == WATER_SORT_HARD ?
-                               0xb7e15162u : 0x85ebca6bu;
-    uint32_t state = game->seed ^ 0x9e3779b9u ^ difficulty_salt;
-    uint8_t i;
-    uint8_t j;
-
-    if (state == 0)
-        state = 0x6d2b79f5u;
+    uint8_t tube;
     clear_board(game);
-    color_map[0] = 0;
-    for (i = 1; i <= game->color_count; ++i)
-        color_map[i] = i;
-    for (i = game->color_count; i > 1; --i) {
-        j = bounded_byte(prng_next(&state), i) + 1;
-        {
-            uint8_t tmp = color_map[i];
-            color_map[i] = color_map[j];
-            color_map[j] = tmp;
-        }
-    }
-
-    for (i = 0; i < game->tube_count; ++i)
-        tube_map[i] = i;
-    for (i = game->tube_count; i > 1; --i) {
-        j = bounded_byte(prng_next(&state), i);
-        {
-            uint8_t tmp = tube_map[i - 1];
-            tube_map[i - 1] = tube_map[j];
-            tube_map[j] = tmp;
-        }
-    }
-
-    for (i = 0; i < game->tube_count; ++i) {
-        uint8_t destination = tube_map[i];
+    for (tube = 0; tube < game->tube_count; ++tube) {
+        uint16_t packed = water_sort_level_catalog[game->difficulty]
+                                                  [game->level][tube];
         uint8_t layer;
         for (layer = 0; layer < WATER_SORT_TUBE_CAPACITY; ++layer) {
-            uint8_t color = layout[i][layer];
-            game->tube[destination][layer] = color_map[color];
+            uint8_t color = (uint8_t)((packed >> (layer * 4)) & 15);
+            game->tube[tube][layer] = color;
             if (color != 0)
-                game->height[destination] = WATER_SORT_TUBE_CAPACITY;
+                game->height[tube] = WATER_SORT_TUBE_CAPACITY;
         }
     }
 }
 
 void water_sort_start(WaterSortGame *game, WaterSortDifficulty difficulty,
-                      uint32_t seed)
+                      uint8_t level)
 {
     set_configuration(game, difficulty);
-    game->seed = seed;
-    generate_board(game);
+    game->level = level < WATER_SORT_LEVEL_COUNT ? level : 0;
+    load_level(game);
     game->cursor = 0;
     game->selected_source = WATER_SORT_NO_SELECTION;
     game->move_count = 0;
@@ -142,7 +64,15 @@ void water_sort_start(WaterSortGame *game, WaterSortDifficulty difficulty,
 
 void water_sort_restart(WaterSortGame *game)
 {
-    water_sort_start(game, game->difficulty, game->seed);
+    water_sort_start(game, game->difficulty, game->level);
+}
+
+uint8_t water_sort_level_min_moves(WaterSortDifficulty difficulty,
+                                   uint8_t level)
+{
+    if (difficulty > WATER_SORT_HARD || level >= WATER_SORT_LEVEL_COUNT)
+        return 0;
+    return water_sort_level_solution_lengths[difficulty][level];
 }
 
 void water_sort_move_cursor(WaterSortGame *game, int direction)

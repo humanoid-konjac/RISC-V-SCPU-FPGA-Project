@@ -6,8 +6,7 @@ module vga_game_text(
     input wire [9:0] pixel_y,
     input wire [31:0] active_ui,
     input wire [31:0] active_meta,
-    input wire [31:0] active_seed_lo,
-    input wire [31:0] active_seed_hi,
+    input wire [31:0] active_level,
     output reg text_on,
     output reg [11:0] text_rgb
 );
@@ -27,23 +26,11 @@ module vga_game_text(
     reg line_valid;
     reg [34:0] glyph;
 
-    function [7:0] seed_character;
-        input [3:0] index;
-        reg [3:0] digit;
+    function [7:0] level_character;
+        input index;
         begin
-            case (index)
-                0: digit = active_seed_hi[7:4];
-                1: digit = active_seed_hi[3:0];
-                2: digit = active_seed_lo[31:28];
-                3: digit = active_seed_lo[27:24];
-                4: digit = active_seed_lo[23:20];
-                5: digit = active_seed_lo[19:16];
-                6: digit = active_seed_lo[15:12];
-                7: digit = active_seed_lo[11:8];
-                8: digit = active_seed_lo[7:4];
-                default: digit = active_seed_lo[3:0];
-            endcase
-            seed_character = 8'h30 + digit;
+            level_character = 8'h30 + (index ? active_level[3:0]
+                                            : active_level[7:4]);
         end
     endfunction
 
@@ -73,10 +60,10 @@ module vga_game_text(
             case (line)
                 0: case(index) 0:fixed_character="W";1:fixed_character="A";2:fixed_character="T";3:fixed_character="E";4:fixed_character="R";6:fixed_character="S";7:fixed_character="O";8:fixed_character="R";9:fixed_character="T";default:;endcase
                 1: case(index) 0:fixed_character="M";1:fixed_character="O";2:fixed_character="D";3:fixed_character="E";5:fixed_character="<";14:fixed_character=">";default:;endcase
-                2: case(index) 0:fixed_character="S";1:fixed_character="E";2:fixed_character="E";3:fixed_character="D";default:;endcase
-                3: case(index) 0:fixed_character="A";1:fixed_character="/";2:fixed_character="D";4:fixed_character="M";5:fixed_character="O";6:fixed_character="D";7:fixed_character="E";10:fixed_character="0";11:fixed_character="-";12:fixed_character="9";14:fixed_character="S";15:fixed_character="E";16:fixed_character="E";17:fixed_character="D";default:;endcase
-                4: case(index) 0:fixed_character="R";2:fixed_character="R";3:fixed_character="A";4:fixed_character="N";5:fixed_character="D";6:fixed_character="O";7:fixed_character="M";10:fixed_character="E";11:fixed_character="N";12:fixed_character="T";13:fixed_character="E";14:fixed_character="R";16:fixed_character="S";17:fixed_character="T";18:fixed_character="A";19:fixed_character="R";20:fixed_character="T";default:;endcase
-                5: case(index) 0:fixed_character="S";1:fixed_character="E";2:fixed_character="E";3:fixed_character="D";5:fixed_character="T";6:fixed_character="O";7:fixed_character="O";9:fixed_character="L";10:fixed_character="A";11:fixed_character="R";12:fixed_character="G";13:fixed_character="E";default:;endcase
+                2: case(index) 0:fixed_character="L";1:fixed_character="E";2:fixed_character="V";3:fixed_character="E";4:fixed_character="L";9:fixed_character="/";11:fixed_character="1";12:fixed_character="2";default:;endcase
+                3: case(index) 0:fixed_character="W";1:fixed_character="/";2:fixed_character="S";4:fixed_character="M";5:fixed_character="O";6:fixed_character="D";7:fixed_character="E";10:fixed_character="A";11:fixed_character="/";12:fixed_character="D";14:fixed_character="L";15:fixed_character="E";16:fixed_character="V";17:fixed_character="E";18:fixed_character="L";default:;endcase
+                4: case(index) 0:fixed_character="1";1:fixed_character="-";2:fixed_character="1";3:fixed_character="2";5:fixed_character="L";6:fixed_character="E";7:fixed_character="V";8:fixed_character="E";9:fixed_character="L";12:fixed_character="E";13:fixed_character="N";14:fixed_character="T";15:fixed_character="E";16:fixed_character="R";18:fixed_character="S";19:fixed_character="T";20:fixed_character="A";21:fixed_character="R";22:fixed_character="T";default:;endcase
+                5: case(index) 0:fixed_character="L";1:fixed_character="E";2:fixed_character="V";3:fixed_character="E";4:fixed_character="L";6:fixed_character="I";7:fixed_character="N";8:fixed_character="V";9:fixed_character="A";10:fixed_character="L";11:fixed_character="I";12:fixed_character="D";default:;endcase
                 7: case(index) 0:fixed_character="A";1:fixed_character="/";2:fixed_character="D";4:fixed_character="M";5:fixed_character="O";6:fixed_character="V";7:fixed_character="E";10:fixed_character="E";11:fixed_character="N";12:fixed_character="T";13:fixed_character="E";14:fixed_character="R";16:fixed_character="P";17:fixed_character="O";18:fixed_character="U";19:fixed_character="R";22:fixed_character="U";24:fixed_character="U";25:fixed_character="N";26:fixed_character="D";27:fixed_character="O";default:;endcase
                 8: case(index) 0:fixed_character="E";1:fixed_character="S";2:fixed_character="C";4:fixed_character="C";5:fixed_character="A";6:fixed_character="N";7:fixed_character="C";8:fixed_character="E";9:fixed_character="L";12:fixed_character="R";14:fixed_character="R";15:fixed_character="E";16:fixed_character="S";17:fixed_character="T";18:fixed_character="A";19:fixed_character="R";20:fixed_character="T";23:fixed_character="M";25:fixed_character="M";26:fixed_character="E";27:fixed_character="N";28:fixed_character="U";default:;endcase
                 9: case(index) 0:fixed_character="Y";1:fixed_character="O";2:fixed_character="U";4:fixed_character="W";5:fixed_character="I";6:fixed_character="N";default:;endcase
@@ -155,18 +142,18 @@ module vga_game_text(
             glyph_row = (pixel_y - line_y) >> 1;
             if (line_id == 1 && char_index >= 7 && char_index < 13)
                 character = difficulty_character(char_index - 7);
-            else if (line_id == 2 && char_index >= 5 && char_index < 15)
-                character = seed_character(char_index - 5);
+            else if (line_id == 2 && char_index >= 6 && char_index < 8)
+                character = level_character(char_index - 6);
             else if (line_id == 6) begin
                 if (char_index < 6) character = difficulty_character(char_index);
-                else if (char_index >= 8 && char_index < 12)
-                    case(char_index) 8:character="S";9:character="E";10:character="E";default:character="D";endcase
-                else if (char_index >= 13 && char_index < 23)
-                    character = seed_character(char_index - 13);
-                else if (char_index >= 25 && char_index < 30)
-                    case(char_index) 25:character="M";26:character="O";27:character="V";28:character="E";default:character="S";endcase
-                else if (char_index >= 31 && char_index < 35)
-                    case(char_index) 31:character=8'h30+active_meta[31:28];32:character=8'h30+active_meta[27:24];33:character=8'h30+active_meta[23:20];default:character=8'h30+active_meta[19:16];endcase
+                else if (char_index >= 8 && char_index < 13)
+                    case(char_index) 8:character="L";9:character="E";10:character="V";11:character="E";default:character="L";endcase
+                else if (char_index >= 14 && char_index < 16)
+                    character = level_character(char_index - 14);
+                else if (char_index >= 18 && char_index < 23)
+                    case(char_index) 18:character="M";19:character="O";20:character="V";21:character="E";default:character="S";endcase
+                else if (char_index >= 24 && char_index < 28)
+                    case(char_index) 24:character=8'h30+active_meta[31:28];25:character=8'h30+active_meta[27:24];26:character=8'h30+active_meta[23:20];default:character=8'h30+active_meta[19:16];endcase
             end else character = fixed_character(line_id, char_index);
         end
         glyph = glyph_for(character);

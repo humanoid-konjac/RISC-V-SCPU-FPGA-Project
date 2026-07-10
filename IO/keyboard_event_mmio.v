@@ -22,17 +22,17 @@ module keyboard_event_mmio(
     localparam [7:0] KEY_UNDO    = 8'd6;
     localparam [7:0] KEY_MENU    = 8'd7;
     localparam [7:0] KEY_BACKSPACE = 8'd8;
+    localparam [7:0] KEY_UP      = 8'd9;
+    localparam [7:0] KEY_DOWN    = 8'd10;
     localparam [7:0] KEY_DIGIT0  = 8'd16;
 
     localparam [11:0] ADDR_STATUS = 12'h000;
     localparam [11:0] ADDR_CODE   = 12'h004;
     localparam [11:0] ADDR_ACK    = 12'h008;
-    localparam [11:0] ADDR_RANDOM = 12'h00c;
 
     reg break_pending;
     reg extended_pending;
     reg [7:0] decoded_code;
-    reg [31:0] entropy_counter = 32'h6d2b79f5;
 
     wire ack_write = write_en && (addr[11:0] == ADDR_ACK) && write_data[0];
 
@@ -42,12 +42,16 @@ module keyboard_event_mmio(
             case (scan_code)
                 8'h6b: decoded_code = KEY_LEFT;
                 8'h74: decoded_code = KEY_RIGHT;
+                8'h75: decoded_code = KEY_UP;
+                8'h72: decoded_code = KEY_DOWN;
                 default: decoded_code = KEY_NONE;
             endcase
         end else begin
             case (scan_code)
                 8'h1c: decoded_code = KEY_LEFT;    // A
                 8'h23: decoded_code = KEY_RIGHT;   // D
+                8'h1d: decoded_code = KEY_UP;      // W
+                8'h1b: decoded_code = KEY_DOWN;    // S
                 8'h5a: decoded_code = KEY_CONFIRM; // Enter
                 8'h29: decoded_code = KEY_CONFIRM; // Space
                 8'h76: decoded_code = KEY_CANCEL;  // Esc
@@ -69,9 +73,6 @@ module keyboard_event_mmio(
             endcase
         end
     end
-
-    always @(posedge clk)
-        entropy_counter <= entropy_counter + 32'h9e3779b9;
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -108,7 +109,6 @@ module keyboard_event_mmio(
         case (addr[11:0])
             ADDR_STATUS: read_data = {31'b0, key_ready};
             ADDR_CODE:   read_data = {24'b0, key_code};
-            ADDR_RANDOM: read_data = entropy_counter;
             default:     read_data = 32'b0;
         endcase
     end

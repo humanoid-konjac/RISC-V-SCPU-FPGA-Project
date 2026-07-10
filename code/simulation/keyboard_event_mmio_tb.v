@@ -134,13 +134,20 @@ module keyboard_event_mmio_tb;
         check32("digit nine code", {24'b0, key_code}, 32'h19);
         ack_event();
 
-        addr = 32'hd000000c;
-        #1 write_data = read_data;
-        repeat (2) @(posedge clk);
-        if (read_data === write_data) begin
-            errors = errors + 1;
-            $display("FAIL: free-running random counter did not advance");
-        end
+        send_scan(8'h1d); // W
+        check32("up code", {24'b0, key_code}, 32'h9);
+        ack_event();
+        send_scan(8'h1b); // S
+        check32("down code", {24'b0, key_code}, 32'h0a);
+        ack_event();
+        send_scan(8'he0);
+        send_scan(8'h75); // up arrow
+        check32("up arrow code", {24'b0, key_code}, 32'h9);
+        ack_event();
+        send_scan(8'he0);
+        send_scan(8'h72); // down arrow
+        check32("down arrow code", {24'b0, key_code}, 32'h0a);
+        ack_event();
 
         if (errors == 0)
             $display("PASS: keyboard event MMIO test completed");

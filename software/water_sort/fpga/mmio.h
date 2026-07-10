@@ -8,7 +8,6 @@
 #define KEY_STATUS      MMIO32(0xd0000000u)
 #define KEY_CODE        MMIO32(0xd0000004u)
 #define KEY_ACK         MMIO32(0xd0000008u)
-#define RANDOM_COUNTER  MMIO32(0xd000000cu)
 
 #define GAME_TUBE(index) MMIO32(0xd0000020u + ((uint32_t)(index) << 2))
 #define GAME_TUBE0       GAME_TUBE(0)
@@ -16,8 +15,7 @@
 #define GAME_MOVE_COUNT MMIO32(0xd0000044u)
 #define GAME_COMMIT     MMIO32(0xd0000048u)
 #define GAME_META       MMIO32(0xd000004cu)
-#define GAME_SEED_LO    MMIO32(0xd0000050u)
-#define GAME_SEED_HI    MMIO32(0xd0000054u)
+#define GAME_LEVEL      MMIO32(0xd0000050u)
 
 #define SEVEN_SEG_DATA  MMIO32(0xe0000000u)
 #define LED_DATA        MMIO32(0xf0000000u)
@@ -39,6 +37,8 @@ enum {
     KEY_EVENT_UNDO = 6,
     KEY_EVENT_MENU = 7,
     KEY_EVENT_BACKSPACE = 8,
+    KEY_EVENT_UP = 9,
+    KEY_EVENT_DOWN = 10,
     KEY_EVENT_DIGIT0 = 16
 };
 

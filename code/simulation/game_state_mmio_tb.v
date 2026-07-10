@@ -12,8 +12,7 @@ module game_state_mmio_tb;
     wire [31:0] active_ui;
     wire [31:0] active_move_count;
     wire [31:0] active_meta;
-    wire [31:0] active_seed_lo;
-    wire [31:0] active_seed_hi;
+    wire [31:0] active_level;
     integer errors;
 
     game_state_mmio U_DUT(
@@ -28,8 +27,7 @@ module game_state_mmio_tb;
         .active_ui(active_ui),
         .active_move_count(active_move_count),
         .active_meta(active_meta),
-        .active_seed_lo(active_seed_lo),
-        .active_seed_hi(active_seed_hi)
+        .active_level(active_level)
     );
 
     task check32;
@@ -82,8 +80,7 @@ module game_state_mmio_tb;
         write_reg(32'hd0000040, 32'h00000180);
         write_reg(32'hd0000044, 32'h00000007);
         write_reg(32'hd000004c, 32'h00210082);
-        write_reg(32'hd0000050, 32'h34567890);
-        write_reg(32'hd0000054, 32'h00000012);
+        write_reg(32'hd0000050, 32'h00000012);
         write_reg(32'hd0000048, 32'h00000001);
 
         check32("active waits for frame", active_tubes[31:0], 32'h0);
@@ -96,8 +93,7 @@ module game_state_mmio_tb;
         check32("committed snapshot UI", active_ui, 32'h00000180);
         check32("committed snapshot moves", active_move_count, 32'h7);
         check32("committed metadata", active_meta, 32'h00210082);
-        check32("committed seed low", active_seed_lo, 32'h34567890);
-        check32("committed seed high", active_seed_hi, 32'h12);
+        check32("committed level", active_level, 32'h12);
 
         // The post-COMMIT shadow write did not alter the pending snapshot.
         write_reg(32'hd0000048, 32'h1);

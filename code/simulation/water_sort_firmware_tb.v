@@ -34,8 +34,7 @@ module water_sort_firmware_tb;
     wire [31:0] active_ui;
     wire [31:0] active_move_count;
     wire [31:0] active_meta;
-    wire [31:0] active_seed_lo;
-    wire [31:0] active_seed_hi;
+    wire [31:0] active_level;
 
     reg [31:0] imem [0:1023];
     reg [31:0] dmem [0:1023];
@@ -105,8 +104,7 @@ module water_sort_firmware_tb;
         .active_ui(active_ui),
         .active_move_count(active_move_count),
         .active_meta(active_meta),
-        .active_seed_lo(active_seed_lo),
-        .active_seed_hi(active_seed_hi)
+        .active_level(active_level)
     );
 
     always @(posedge clk) begin
@@ -202,17 +200,26 @@ module water_sort_firmware_tb;
         check32("menu UI", active_ui, 32'h0);
         check32("normal menu meta", active_meta & 32'hff, 32'h71);
 
-        // Type decimal seed 123, select HARD, and start.
+        // Invalid level 99 is rejected and remains in the menu.
+        send_scan_and_wait(8'h46);
+        send_scan_and_wait(8'h46);
+        send_scan_and_wait(8'h5a);
+        pulse_frame();
+        check32("invalid level stays in menu", active_ui & 32'h00000a00,
+                32'h00000800);
+        check32("invalid level BCD", active_level, 32'h00000099);
+        send_scan_and_wait(8'h66);
+        send_scan_and_wait(8'h66);
+
+        // Type level 12, select HARD with S/down, and start.
         send_scan_and_wait(8'h16);
         send_scan_and_wait(8'h1e);
-        send_scan_and_wait(8'h26);
-        send_scan_and_wait(8'h23);
+        send_scan_and_wait(8'h1b);
         send_scan_and_wait(8'h5a);
         pulse_frame();
         check32("playing UI", active_ui, 32'h00000200);
         check32("hard game meta", active_meta & 32'hff, 32'h82);
-        check32("seed low BCD", active_seed_lo, 32'h00000123);
-        check32("seed high BCD", active_seed_hi, 32'h0);
+        check32("level BCD", active_level, 32'h00000012);
         initial_tubes = active_tubes;
 
         source_index = -1;
@@ -243,7 +250,7 @@ module water_sort_firmware_tb;
                 $display("FAIL: undo did not restore generated board");
             end
 
-            send_scan_and_wait(8'h2d); // R restart same seed
+            send_scan_and_wait(8'h2d); // R restart same level
             cursor_model = 0;
             pulse_frame();
             if (active_tubes !== initial_tubes) begin

@@ -5,8 +5,7 @@ module vga_game_pattern(
     input wire clk, input wire rst, input wire frame_tick,
     input wire active_video, input wire [9:0] pixel_x, input wire [9:0] pixel_y,
     input wire [255:0] active_tubes, input wire [31:0] active_ui,
-    input wire [31:0] active_meta, input wire [31:0] active_seed_lo,
-    input wire [31:0] active_seed_hi,
+    input wire [31:0] active_meta, input wire [31:0] active_level,
     output reg [3:0] vga_r, output reg [3:0] vga_g, output reg [3:0] vga_b
 );
     wire [2:0] cursor_index = active_ui[2:0];
@@ -44,7 +43,7 @@ module vga_game_pattern(
                                   (pixel_y>=55 && pixel_y<424 && (pixel_x>=150 && pixel_x<154 || pixel_x>=486 && pixel_x<490)));
 
     vga_game_text U_TEXT(.pixel_x(pixel_x),.pixel_y(pixel_y),.active_ui(active_ui),
-        .active_meta(active_meta),.active_seed_lo(active_seed_lo),.active_seed_hi(active_seed_hi),
+        .active_meta(active_meta),.active_level(active_level),
         .text_on(text_on),.text_rgb(text_rgb));
 
     always @(posedge clk or posedge rst)
