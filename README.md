@@ -33,6 +33,8 @@ dm_controller.Data_write_to_dm -> RAM_B.dina
 
 普通数据 RAM 访问不经过 `MIO_BUS`。`MIO_BUS` 只负责外设译码、显示相关数据和外设读数据返回；`top.v` 中 `MIO_BUS.ram_data_out` 固定接 `32'b0`，避免把 RAM `douta` 额外扇出到 MIO。
 
+数据 RAM 同时响应原有 `0x0000_0000～0x0000_0fff` 和 C 裸机程序使用的 `0x1000_0000～0x1000_0fff`，两段地址映射到同一个 `RAM_B`，地址仍使用 `Addr_out[11:2]`。游戏 MMIO 独立使用 `0xd000_0000～0xd000_0fff`，不会进入 RAM 写通路。
+
 ## 键盘显示测试
 
 `top.v` 提供 PS/2 键盘直连数码管测试模式：
@@ -42,16 +44,15 @@ dm_controller.Data_write_to_dm -> RAM_B.dina
 - `SW15 = 1` 时，数码管显示最近一次按下键的 `{8'h00, ASCII, 8'h00, scan_code}`。
 - `SW15 = 0` 时，保持原来的 CPU/IO 数码管显示路径。
 
-该测试已在 NEXYS4 A7-100T 上板通过；后续游戏程序需要键盘输入时，可以复用 `IO/ps2_keyboard.v` 输出的扫描码接入 MMIO 或中断。
+该直连测试已在 NEXYS4 A7-100T 上板通过。当前新增 `keyboard_event_mmio`，把按键 make 事件转换成 `LEFT/RIGHT/CONFIRM/CANCEL/RESTART` 逻辑码并保持到 CPU 写 ACK；PS/2 break 序列不会产生事件。该 MMIO 路径已通过 RTL 仿真，待使用 Step 3 固件上板验证。
 
 ## VGA 显示测试
 
 `top.v` 提供 VGA 直连测试输出，用于先验证显示器物理链路和键盘到画面的反馈：
 
 - 输出端口为 `vga_r[3:0]`、`vga_g[3:0]`、`vga_b[3:0]`、`vga_hs`、`vga_vs`。
-- 当前实现为纯 RTL `640x480@60Hz` 测试图，不经过 CPU、RAM 或 `MIO_BUS`。
-- 画面包含色条、白色边框和中心参考线，便于检查颜色顺序、同步和可视区域。
-- `SW14 = 1` 时叠加键盘控制方块，方向键或 WASD 可移动方块；`SW14 = 0` 时只显示固定测试图。
+- `SW14 = 0` 保留纯 RTL `640x480@60Hz` 色条、边框、中心线和键盘控制方块，用于检查物理显示链路。
+- `SW14 = 1` 切换到游戏 MMIO 画面；Step 3 暂时显示一个由 CPU 控制颜色的中央方块，Step 4 再替换为完整试管。
 - `SW15` 仍只控制数码管是否显示键盘值，不影响 VGA。
 
 VGA 管脚按 Digilent Nexys A7-100T master XDC 记录，兼容当前 Nexys4 A7-100T：
@@ -64,7 +65,7 @@ vga_hs      -> B11
 vga_vs      -> B12
 ```
 
-该测试已在 NEXYS4 A7-100T 上板通过：`SW14 = 0` 时显示器稳定显示色条和参考线，`SW14 = 1` 时方向键/WASD 可移动方块。
+原 VGA 测试已在 NEXYS4 A7-100T 上板通过。新增的游戏画面选择、状态提交和中央色块已通过 RTL 仿真及顶层展开，待加载 Step 3 固件上板验证。
 
 后续 C 语言小游戏显示建议在这条稳定 VGA 输出链路上扩展 tile/framebuffer/MMIO，不要先把完整显存设计和 VGA 物理调试混在一起。
 
@@ -82,16 +83,30 @@ PS/2 键盘 -> 按键事件寄存器 -> MMIO -> CPU/C 游戏逻辑
 
 第一版操作固定为：左右键移动光标，Enter/Space 选择来源或执行倾倒，Esc 取消选择，R 重新开始。合法倾倒才增加步数；步数显示在数码管，通关时使用 VGA 闪烁和 LED 全亮提示。
 
+### 游戏 MMIO
+
+| 地址 | 访问 | 含义 |
+|---|---|---|
+| `0xd000_0000` | R | `KEY_STATUS`，bit0 为待处理事件 |
+| `0xd000_0004` | R | `KEY_CODE`：1 左、2 右、3 确认、4 取消、5 重置 |
+| `0xd000_0008` | W | `KEY_ACK`，写 bit0 清除事件 |
+| `0xd000_0020～0xd000_003c` | R/W | 8 根试管 shadow 状态 |
+| `0xd000_0040` | R/W | UI shadow 状态 |
+| `0xd000_0044` | R/W | 步数 shadow 状态 |
+| `0xd000_0048` | W | `COMMIT`，拍摄 pending 快照 |
+
+游戏寄存器使用 shadow、pending、active 三组状态。CPU 写 `COMMIT` 时固定 pending 快照，VGA 在下一个 `frame_tick` 整体更新 active；即使 CPU 在帧边界前继续写 shadow，也不会污染已经提交的画面。MMIO 写脉冲由 `cpu_en && mem_w` 限定，避免流水线暂停时重复 ACK 或 COMMIT。
+
 ### 分阶段计划
 
 - [x] **Step 1：电脑端纯 C 逻辑。** 完成固定关卡、选择、合法性判断、连续同色倾倒、通关、取消和重置，并通过主机单元测试。
-- [ ] **Step 2：键盘 MMIO。** 锁存按键事件并由 CPU 读取/确认，先用 LED 和数码管验证不会漏键。
-- [ ] **Step 3：CPU 控制 VGA 状态。** 建立游戏状态寄存器和帧边界提交，用左右键切换 VGA 色块颜色验证完整链路。
+- [x] **Step 2：键盘 MMIO。** 已实现扫描码逻辑事件、单事件锁存、CPU ACK、裸机启动/链接和双 COE 构建流程；RTL 仿真通过，待上板确认。
+- [x] **Step 3：CPU 控制 VGA 状态。** 已实现 shadow/pending/active 帧提交、CPU 控制中央色块和诊断固件；模块仿真、旧功能回归和顶层展开通过，待上板确认。
 - [ ] **Step 4：固定试管渲染。** 显示 8 根试管、四层液体、光标和来源选中效果。
 - [ ] **Step 5：完整游戏上板。** 移植 C 主循环，接通输入、VGA、步数和通关反馈，完成整机仿真与上板测试。
 - [ ] **Step 6：演示增强。** 第一版稳定后再加入撤销、多关卡、动画、计时和伪随机选关。
 
-当前 Step 1 的主机端源代码和测试位于 `software/water_sort/`。2026-07-10 已使用 `make test` 完成严格警告编译和已知 21 步解回放，并额外通过 AddressSanitizer/UndefinedBehaviorSanitizer 检查。后续每完成一个阶段，都要在此处记录仿真、综合或上板结果，并同步更新 Vivado 导入清单。
+Step 1 的主机端源代码和测试位于 `software/water_sort/`；Step 2/3 裸机诊断固件位于 `software/water_sort/fpga/`。2026-07-10 已通过主机 C 测试、新增 MMIO/VGA 模块测试、原 PS/2/VGA/VGA 时序回归和 `top` 展开。本机尚未安装 GNU RISC-V 裸机工具链，因此 COE 需要在具备 `riscv64-unknown-elf-*` 的环境生成后再上板。
 
 ## CPU 实现
 
@@ -136,21 +151,33 @@ PS/2 键盘 -> 按键事件寄存器 -> MMIO -> CPU/C 游戏逻辑
 
 1. 顶层：`top.v`，并在 **Settings -> General -> Top module name** 设为 `top`。
 2. CPU RTL：`code/SCPU.v`、`code/RF.v`、`code/ctrl.v`、`code/ctrl_encode_def.v`、`code/alu.v`、`code/EXT.v`、`code/dm_controller.v`。
-3. 板级 IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`。
+3. 板级 IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/keyboard_event_mmio.v`、`IO/game_state_mmio.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`、`IO/vga_game_pattern.v`。
 4. 参考外设模块：`edf_file/MIO_BUS.V`，以及 `edf_file/Multi_8CH32.v/.edf`、`edf_file/SPIO.v/.edf`、`edf_file/SSeg7.v/.edf`。
 5. 约束：在 **Add or Create Constraints** 中只加入当前的 `icf.xdc`，不要保留旧版或重复的 XDC。
 
 以下文件仅用于仿真，不加入 **Design Sources**：`code/simulation/*`、`code/dm.v`、`code/im.v`。`archive/`、`ref/`、`asm2coe/`、`tmp/` 也不加入工程。
 
-`ROM_D` 与 `RAM_B` 是已有 Vivado IP：本次键盘/VGA/中断更新不需要修改或重新生成它们。只有新建空工程或更换 `.coe` 时，才创建/更新 IP：
+`ROM_D` 与 `RAM_B` 是已有 Vivado IP，端口和容量不变；使用 Step 3 固件时只需分别更换初始化 COE 并重新生成 output products：
 
 - `ROM_D`：模块名 `ROM_D`，地址 `a[9:0]`，数据输出 `spo[31:0]`。
 - `RAM_B`：模块名 `RAM_B`，地址 `addra[9:0]`，数据 `dina/douta[31:0]`，字节写使能 `wea[3:0]`，时钟 `clka`。
 
-导入完成后依次运行 **Synthesis**、**Implementation**、**Generate Bitstream**。上板时接好 VGA 和 PS/2 键盘，下载 bitstream 后：
+### Step 2/3 上板测试
 
-- `SW14 = 0`：确认 VGA 色条、白色边框和中心线稳定显示。
-- `SW14 = 1`：用方向键或 WASD 移动 VGA 方块。
+1. 安装 GNU RISC-V 裸机工具链，在 `software/water_sort/fpga/` 执行 `make`，得到 `coe/game_phase3_i.coe` 和 `coe/game_phase3_d.coe`；同时查看 `build/game_phase3.asm`，确认没有 M 扩展或未解析运行库调用。
+2. 在 Vivado 中把 `ROM_D` 初始化文件改为 `game_phase3_i.coe`，把 `RAM_B` 初始化文件改为 `game_phase3_d.coe`，重新生成两个 IP 的 output products。
+3. 按上面的清单加入三个新增 IO 文件，确认顶层仍为 `top`，依次运行 **Synthesis**、**Implementation**、**Generate Bitstream**。
+4. 接好 VGA 和 PS/2 键盘，下载 bitstream；设置 `SW2=0` 使用快速 CPU，`SW14=1` 显示游戏色块，`SW15=0` 显示 CPU/IO 数码管数据，`SW7:5=000` 选择固件写入的显示通道。
+5. 复位后中央方块应为红色。按右方向键或 D，颜色按红、绿、蓝、黄、紫、青循环；按左方向键或 A 反向循环；按 R 恢复红色。每次按键 LED 和数码管显示逻辑码 `1～5`。
+6. 分别测试 Enter/Space 为 `3`、Esc 为 `4`、R 为 `5`；长按和连续点击后确认一次事件只处理一次且画面稳定。`SW15=1` 可同时回到原始扫描码直连诊断。
+7. 将 `SW14=0`，确认原色条、边框、中心线及键盘移动方块仍正常，以排除 VGA 物理链路回归。
+
+若中央方块保持灰色，优先检查 `ROM_D` 是否确实使用新指令 COE、是否重新生成 output products，以及 `SW2/SW14` 是否为 `0/1`。若 LED 有键码但颜色不变，检查 `game_state_mmio.v` 是否加入 Design Sources；若 `SW15=1` 有扫描码但 LED 无变化，检查键盘 MMIO 文件和固件 COE。
+
+原有板级自检方式仍保留：
+
+- `SW14 = 0`：确认 VGA 色条、白色边框、中心线和键盘方块稳定显示。
+- `SW14 = 1`：进入 CPU 游戏 MMIO 画面。
 - `SW15 = 1`：数码管显示最近一次键盘按下值；`SW15 = 0`：恢复原 CPU/IO 数码管显示。
 
 不要把 `archive/` 加入 Vivado source set。里面是旧的 `MIO_BUS`、`SCPU`、`dm_controller` 参考实现，只用于备份。

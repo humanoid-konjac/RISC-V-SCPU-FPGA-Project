@@ -33,8 +33,8 @@
    当前选定应用为 8 试管、6 颜色、2 空管的倒水排序游戏。C 程序负责游戏规则和状态，Verilog 负责按键事件锁存、MMIO 状态寄存器与 VGA 实时渲染，不使用完整帧缓冲。开发子进度如下：
 
    - [x] Step 1：在电脑端完成纯 C 游戏逻辑，包括固定关卡、光标与选择、倾倒合法性、连续同色移动、胜利判断、取消和重新开始；通过主机单元测试后再移植。（2026-07-10 已实现，严格警告编译、21 步通关回放和 sanitizer 检查通过）
-   - [ ] Step 2：增加带锁存和确认机制的键盘 MMIO，建立裸机 C 启动、链接和双 COE 构建流程，并用 LED/数码管验证 CPU 不漏读按键。
-   - [ ] Step 3：增加游戏状态 MMIO、shadow/commit 帧边界切换，先用按键控制 VGA 色块，验证“键盘 -> CPU -> MMIO -> VGA”完整链路。
+   - [x] Step 2：增加带锁存和确认机制的键盘 MMIO，建立裸机 C 启动、链接和双 COE 构建流程，并用 LED/数码管验证 CPU 不漏读按键。（2026-07-10 RTL 仿真通过，待上板）
+   - [x] Step 3：增加游戏状态 MMIO、shadow/commit 帧边界切换，先用按键控制 VGA 色块，验证“键盘 -> CPU -> MMIO -> VGA”完整链路。（2026-07-10 模块仿真、旧功能回归和顶层展开通过，待上板）
    - [ ] Step 4：实现 8 根固定试管的 VGA 实时渲染，验证颜色、层序、位置、光标和来源选中效果。
    - [ ] Step 5：移植完整 C 游戏主循环，接通键盘、试管状态、步数、LED 和通关效果，完成整机仿真与上板验收。
    - [ ] Step 6：在第一版稳定后再评估撤销、多关卡、倾倒动画、计时、通关动画和伪随机选关；这些功能不属于第一版完成条件。
@@ -63,6 +63,10 @@ dm_controller.wea_mem -> RAM_B.wea
 ```
 
 `MIO_BUS` 只用于外设译码、显示和外设读数据返回。
+
+数据 RAM 保留 `0x00000000～0x00000fff` 映射，并为裸机 C 增加 `0x10000000～0x10000fff` 别名；两者都必须继续使用 `Addr_out[11:2]` 连接 `RAM_B.addra`。游戏 MMIO 使用 `0xd0000000～0xd0000fff`，不得打开 RAM 写使能。
+
+游戏 MMIO 写使能必须限定为 `cpu_en && mem_w` 的单周期脉冲，不能直接使用可能在 CPU 暂停期间保持的 `mem_w`，否则会重复执行键盘 ACK 或画面 COMMIT。
 
 ### 板级接口备忘
 
@@ -109,16 +113,15 @@ vga_vs    -> B12
 
 - NEXYS4 A7-100T 的 PS/2 端口约束为 `ps2_clk -> F4`、`ps2_data -> B2`。
 - `SW15 = 1` 时，数码管显示最近一次按下键的 `{8'h00, ASCII, 8'h00, scan_code}`；`SW15 = 0` 时保持原 CPU/IO 显示。
-- 当前键盘测试已在 NEXYS4 A7-100T 上板通过，是硬件直连显示，不经过 CPU、RAM 或 `MIO_BUS`；后续游戏需要键盘输入时再接入 MMIO 或中断。
+- 键盘直连数码管测试已在 NEXYS4 A7-100T 上板通过；当前同时接入 `keyboard_event_mmio`，把逻辑按键保持到 CPU 写 ACK。MMIO RTL 仿真已通过，待加载 Step 3 固件上板测试。
 
 ### VGA 显示测试
 
 - 顶层 VGA 端口为 `vga_r[3:0]`、`vga_g[3:0]`、`vga_b[3:0]`、`vga_hs`、`vga_vs`。
-- 当前 VGA 第一阶段是纯 RTL 自检，不接 CPU MMIO，不经过 RAM 或 `MIO_BUS`。
+- `SW14=0` 保留纯 RTL 色条和键盘方块自检；`SW14=1` 显示 CPU 游戏 MMIO 画面。
 - VGA 使用 100MHz `clk` 产生 25MHz `pixel_tick` 使能，不新增全局派生时钟。
 - 当前时序为 `640x480@60Hz`：水平 `640/16/96/48`，垂直 `480/10/2/33`。
-- `SW14 = 1` 叠加键盘控制方块，方向键或 WASD 控制移动；`SW14 = 0` 只显示固定色条/边框/中心线。
-- 后续游戏建议复用这条 VGA 输出链路，再新增 tile/framebuffer/MMIO；键盘状态可通过 MMIO 或中断机制接入 CPU。
+- Step 3 游戏画面暂时是 CPU 控制颜色的中央方块，状态在 `COMMIT` 后于下一 `frame_tick` 原子切换；Step 4 再替换为完整试管渲染。
 
 ### Vivado 导入清单
 
@@ -126,12 +129,14 @@ vga_vs    -> B12
 
 - `top.v`
 - CPU：`code/SCPU.v`、`code/RF.v`、`code/ctrl.v`、`code/ctrl_encode_def.v`、`code/alu.v`、`code/EXT.v`、`code/dm_controller.v`
-- IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`
+- IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/keyboard_event_mmio.v`、`IO/game_state_mmio.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`、`IO/vga_game_pattern.v`
 - 外设：`edf_file/MIO_BUS.V`，以及 `edf_file/Multi_8CH32.v/.edf`、`edf_file/SPIO.v/.edf`、`edf_file/SSeg7.v/.edf`
 - 约束：只使用当前 `icf.xdc`
 - IP：保留现有 `ROM_D` 和 `RAM_B`，本次不修改或重新生成
 
 `code/simulation/*`、`code/dm.v`、`code/im.v` 只用于仿真；`archive/`、`ref/`、`asm2coe/`、`tmp/` 不加入 Vivado 工程。完成导入后设置顶层为 `top`，依次执行综合、实现和生成 bitstream。
+
+Step 2/3 裸机固件位于 `software/water_sort/fpga/`，使用 GNU `riscv64-unknown-elf-*` 生成 `coe/game_phase3_i.coe` 和 `coe/game_phase3_d.coe`。当前本机未安装该工具链，所以只验证了 C 语法、Makefile 依赖、RTL 和顶层展开；生成 COE 后仍需实际上板确认。
 
 ### 流水线与时钟约束
 

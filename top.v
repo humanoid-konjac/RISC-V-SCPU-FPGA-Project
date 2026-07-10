@@ -49,7 +49,17 @@ module top(
     wire  [3:0] wea_mem_raw;
     wire        mio_data_ram_we;
     wire        ram_access;
+    wire        game_access;
+    wire        game_write_en;
     wire [31:0] Data_in_dm;
+    wire [31:0] keyboard_mmio_data;
+    wire [31:0] game_state_mmio_data;
+    wire [31:0] game_mmio_data;
+    wire        game_key_ready;
+    wire  [7:0] game_key_code;
+    wire [255:0] game_active_tubes;
+    wire [31:0] game_active_ui;
+    wire [31:0] game_active_move_count;
 
     wire [15:0] LED_out;
     wire        GPIOf0000000_we;
@@ -74,22 +84,37 @@ module top(
     wire  [9:0] vga_pixel_x;
     wire  [9:0] vga_pixel_y;
     wire        vga_active_video;
+    wire        vga_frame_tick;
     wire        move_up;
     wire        move_down;
     wire        move_left;
     wire        move_right;
     wire  [9:0] vga_sprite_x_unused;
     wire  [9:0] vga_sprite_y_unused;
+    wire  [3:0] test_vga_r;
+    wire  [3:0] test_vga_g;
+    wire  [3:0] test_vga_b;
+    wire  [3:0] game_vga_r;
+    wire  [3:0] game_vga_g;
+    wire  [3:0] game_vga_b;
 
     assign rst_i = ~rstn;
     assign IO_clk_i = ~clk;
     assign clka0_i = ~clk;
     assign CPU2IO = Peripheral_in;
-    assign ram_access = (Addr_out[31:12] == 20'h00000);
+    assign ram_access = (Addr_out[31:12] == 20'h00000) ||
+                        (Addr_out[31:12] == 20'h10000);
+    assign game_access = (Addr_out[31:12] == 20'hd0000);
+    assign game_write_en = cpu_en && mem_w && game_access;
+    assign game_mmio_data = keyboard_mmio_data | game_state_mmio_data;
     assign wea_mem = ram_access ? wea_mem_raw : 4'b0000;
-    assign Data_in = ram_access ? Data_in_dm : Cpu_data4bus;
+    assign Data_in = ram_access ? Data_in_dm :
+                     (game_access ? game_mmio_data : Cpu_data4bus);
     assign cpu_en = Clk_CPU && !Clk_CPU_d;
     assign display_hex = SW_OK[15] ? keyboard_hex : Disp_num;
+    assign vga_r = SW_OK[14] ? game_vga_r : test_vga_r;
+    assign vga_g = SW_OK[14] ? game_vga_g : test_vga_g;
+    assign vga_b = SW_OK[14] ? game_vga_b : test_vga_b;
 
     always @(posedge clk or posedge rst_i) begin
         if (rst_i)
@@ -230,6 +255,32 @@ module top(
         .move_right(move_right)
     );
 
+    keyboard_event_mmio U16_keyboard_event_mmio(
+        .clk(clk),
+        .rst(rst_i),
+        .scan_code(ps2_scan_code),
+        .scan_valid(ps2_scan_valid),
+        .write_en(game_write_en),
+        .addr(Addr_out),
+        .write_data(Data_out),
+        .read_data(keyboard_mmio_data),
+        .key_ready(game_key_ready),
+        .key_code(game_key_code)
+    );
+
+    game_state_mmio U17_game_state_mmio(
+        .clk(clk),
+        .rst(rst_i),
+        .write_en(game_write_en),
+        .addr(Addr_out),
+        .write_data(Data_out),
+        .frame_tick(vga_frame_tick),
+        .read_data(game_state_mmio_data),
+        .active_tubes(game_active_tubes),
+        .active_ui(game_active_ui),
+        .active_move_count(game_active_move_count)
+    );
+
     vga_timing U14_vga_timing(
         .clk(clk),
         .rst(rst_i),
@@ -237,7 +288,7 @@ module top(
         .pixel_x(vga_pixel_x),
         .pixel_y(vga_pixel_y),
         .active_video(vga_active_video),
-        .frame_tick(),
+        .frame_tick(vga_frame_tick),
         .hsync(vga_hs),
         .vsync(vga_vs)
     );
@@ -249,16 +300,27 @@ module top(
         .active_video(vga_active_video),
         .pixel_x(vga_pixel_x),
         .pixel_y(vga_pixel_y),
-        .enable_sprite(SW_OK[14]),
+        .enable_sprite(1'b1),
         .move_up(move_up),
         .move_down(move_down),
         .move_left(move_left),
         .move_right(move_right),
-        .vga_r(vga_r),
-        .vga_g(vga_g),
-        .vga_b(vga_b),
+        .vga_r(test_vga_r),
+        .vga_g(test_vga_g),
+        .vga_b(test_vga_b),
         .sprite_x(vga_sprite_x_unused),
         .sprite_y(vga_sprite_y_unused)
+    );
+
+    vga_game_pattern U18_vga_game_pattern(
+        .rst(rst_i),
+        .active_video(vga_active_video),
+        .pixel_x(vga_pixel_x),
+        .pixel_y(vga_pixel_y),
+        .active_tubes(game_active_tubes),
+        .vga_r(game_vga_r),
+        .vga_g(game_vga_g),
+        .vga_b(game_vga_b)
     );
 
     SSeg7 U6_SSeg7(

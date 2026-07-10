@@ -45,6 +45,7 @@ transcript
 code/sim_out/
 code/simulation/sim_out/
 software/water_sort/build/
+software/water_sort/fpga/build/
 
 # Editor and temporary files
 *~
