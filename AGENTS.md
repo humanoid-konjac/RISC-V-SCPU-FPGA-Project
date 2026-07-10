@@ -122,6 +122,7 @@ vga_vs    -> B12
 - VGA 使用 100MHz `clk` 产生 25MHz `pixel_tick` 使能，不新增全局派生时钟。
 - 当前时序为 `640x480@60Hz`：水平 `640/16/96/48`，垂直 `480/10/2/33`。
 - Step 3 游戏画面暂时是 CPU 控制颜色的中央方块，状态在 `COMMIT` 后于下一 `frame_tick` 原子切换；Step 4 再替换为完整试管渲染。
+- 测试图/游戏图选择后的 RGB、HS、VS 必须统一经过 `vga_output_register` 寄存后再接顶层管脚，不能把基于 `pixel_x/pixel_y` 的组合译码直接输出；否则计数器位翻转毛刺会在色条或游戏图形中形成固定竖线。
 
 ### Vivado 导入清单
 
@@ -129,7 +130,7 @@ vga_vs    -> B12
 
 - `top.v`
 - CPU：`code/SCPU.v`、`code/RF.v`、`code/ctrl.v`、`code/ctrl_encode_def.v`、`code/alu.v`、`code/EXT.v`、`code/dm_controller.v`
-- IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/keyboard_event_mmio.v`、`IO/game_state_mmio.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`、`IO/vga_game_pattern.v`
+- IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/keyboard_event_mmio.v`、`IO/game_state_mmio.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`、`IO/vga_game_pattern.v`、`IO/vga_output_register.v`
 - 外设：`edf_file/MIO_BUS.V`，以及 `edf_file/Multi_8CH32.v/.edf`、`edf_file/SPIO.v/.edf`、`edf_file/SSeg7.v/.edf`
 - 约束：只使用当前 `icf.xdc`
 - IP：保留现有 `ROM_D` 和 `RAM_B`，本次不修改或重新生成

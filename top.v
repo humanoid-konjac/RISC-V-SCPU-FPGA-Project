@@ -97,6 +97,9 @@ module top(
     wire  [3:0] game_vga_r;
     wire  [3:0] game_vga_g;
     wire  [3:0] game_vga_b;
+    wire [11:0] selected_vga_rgb;
+    wire        vga_hs_raw;
+    wire        vga_vs_raw;
 
     assign rst_i = ~rstn;
     assign IO_clk_i = ~clk;
@@ -112,9 +115,9 @@ module top(
                      (game_access ? game_mmio_data : Cpu_data4bus);
     assign cpu_en = Clk_CPU && !Clk_CPU_d;
     assign display_hex = SW_OK[15] ? keyboard_hex : Disp_num;
-    assign vga_r = SW_OK[14] ? game_vga_r : test_vga_r;
-    assign vga_g = SW_OK[14] ? game_vga_g : test_vga_g;
-    assign vga_b = SW_OK[14] ? game_vga_b : test_vga_b;
+    assign selected_vga_rgb = SW_OK[14] ?
+                              {game_vga_r, game_vga_g, game_vga_b} :
+                              {test_vga_r, test_vga_g, test_vga_b};
 
     always @(posedge clk or posedge rst_i) begin
         if (rst_i)
@@ -289,8 +292,8 @@ module top(
         .pixel_y(vga_pixel_y),
         .active_video(vga_active_video),
         .frame_tick(vga_frame_tick),
-        .hsync(vga_hs),
-        .vsync(vga_vs)
+        .hsync(vga_hs_raw),
+        .vsync(vga_vs_raw)
     );
 
     vga_test_pattern U15_vga_test_pattern(
@@ -321,6 +324,19 @@ module top(
         .vga_r(game_vga_r),
         .vga_g(game_vga_g),
         .vga_b(game_vga_b)
+    );
+
+    vga_output_register U19_vga_output_register(
+        .clk(clk),
+        .rst(rst_i),
+        .rgb_in(selected_vga_rgb),
+        .hsync_in(vga_hs_raw),
+        .vsync_in(vga_vs_raw),
+        .vga_r(vga_r),
+        .vga_g(vga_g),
+        .vga_b(vga_b),
+        .hsync_out(vga_hs),
+        .vsync_out(vga_vs)
     );
 
     SSeg7 U6_SSeg7(
