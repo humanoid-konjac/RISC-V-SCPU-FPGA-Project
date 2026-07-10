@@ -316,11 +316,14 @@ module top(
     );
 
     vga_game_pattern U18_vga_game_pattern(
+        .clk(clk),
         .rst(rst_i),
+        .frame_tick(vga_frame_tick),
         .active_video(vga_active_video),
         .pixel_x(vga_pixel_x),
         .pixel_y(vga_pixel_y),
         .active_tubes(game_active_tubes),
+        .active_ui(game_active_ui),
         .vga_r(game_vga_r),
         .vga_g(game_vga_g),
         .vga_b(game_vga_b)

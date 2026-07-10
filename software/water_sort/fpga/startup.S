@@ -14,6 +14,7 @@ _start:
     j .Lbss_loop
 
 .Lbss_done:
+    call isa_coverage
     call main
 
 .Lhalt:
