@@ -30,16 +30,20 @@
 6. VGA 显示输出和键盘控制方块的上板测试路径。（已经实现并上板测试通过）
 7. 在流水线CPU上实现复杂的应用。（最终目标）
 
-   当前选定应用为 8 试管、6 颜色、2 空管的倒水排序游戏。C 程序负责游戏规则和状态，Verilog 负责按键事件锁存、MMIO 状态寄存器与 VGA 实时渲染，不使用完整帧缓冲。开发子进度如下：
+   当前应用为支持种子、三档难度、完整撤销和菜单的倒水排序游戏。C 程序负责规则、生成和历史，Verilog 负责按键事件、MMIO 与 VGA 字符/试管实时渲染，不使用完整帧缓冲。开发子进度如下：
 
    - [x] Step 1：在电脑端完成纯 C 游戏逻辑，包括固定关卡、光标与选择、倾倒合法性、连续同色移动、胜利判断、取消和重新开始；通过主机单元测试后再移植。（2026-07-10 已实现，严格警告编译、21 步通关回放和 sanitizer 检查通过）
    - [x] Step 2：增加带锁存和确认机制的键盘 MMIO，建立裸机 C 启动、链接和双 COE 构建流程，并用 LED/数码管验证 CPU 不漏读按键。（2026-07-10 RTL 仿真和固件构建通过，待上板）
    - [x] Step 3：增加游戏状态 MMIO、shadow/commit 帧边界切换，先用按键控制 VGA 色块，验证“键盘 -> CPU -> MMIO -> VGA”完整链路。（2026-07-10 模块仿真、旧功能回归、顶层展开和固件构建通过，待上板）
    - [x] Step 4：实现 8 根固定试管的 VGA 实时渲染，验证颜色、层序、位置、光标和来源选中效果。（2026-07-10 关键像素、输出寄存和顶层展开仿真通过，待上板）
    - [x] Step 5：移植完整 C 游戏主循环，接通键盘、试管状态、步数、LED 和通关效果，完成整机仿真与上板验收。（2026-07-10 真实 SCPU 固件 21 步通关仿真通过，待上板）
-   - [ ] Step 6：在第一版稳定后再评估撤销、多关卡、倾倒动画、计时、通关动画和伪随机选关；这些功能不属于第一版完成条件。
+   - [x] Step 6.1：动态 6/7/8 管和 4/6/7 色三档难度。（2026-07-10 主机测试与 VGA 仿真通过，待上板）
+   - [x] Step 6.2：32 位种子确定生成可解关卡，三档各测试 10001 个种子。（2026-07-10 通过）
+   - [x] Step 6.3：1 字节/步、最多 2048 步的完整撤销，支持通关后撤销。（2026-07-10 主机与整机仿真通过）
+   - [x] Step 6.4：十进制种子输入、伪随机种子、难度菜单、同种子重开和返回菜单。（2026-07-10 RTL/真实 SCPU 仿真通过）
+   - [x] Step 6.5：英文 5×7 字库、状态/控制提示、动态居中和通关文字。（2026-07-10 关键像素与顶层展开通过，待上板）
 
-   第一版固定规格：左右键移动，Enter/Space 选择或倾倒，Esc 取消，R 重新开始；合法倾倒才计步；无动画；步数显示在数码管；通关时 VGA 边框闪烁并让 LED 全亮。每完成一个 Step，必须同步更新本清单、`README.md`、Vivado 导入清单和对应验证结果。
+   当前控制：菜单用左右/A/D 选难度、数字键输入种子、Backspace 删除、R 随机、Enter 开始；游戏用 U 撤销、R 重开、M 返回，原移动/倾倒/Esc 保留。每完成一个 Step，必须同步更新本清单、`README.md`、Vivado 导入清单和验证结果。
 
 ## 实现要求
 
@@ -121,7 +125,7 @@ vga_vs    -> B12
 - `SW14=0` 保留纯 RTL 色条和键盘方块自检；`SW14=1` 显示 CPU 游戏 MMIO 画面。
 - VGA 使用 100MHz `clk` 产生 25MHz `pixel_tick` 使能，不新增全局派生时钟。
 - 当前时序为 `640x480@60Hz`：水平 `640/16/96/48`，垂直 `480/10/2/33`。
-- 游戏画面显示 8 根横向试管、四层液体、白色光标下划线、黄色来源框和通关闪烁外边框；状态在 `COMMIT` 后于下一 `frame_tick` 原子切换。
+- 游戏画面按难度显示居中的 6/7/8 根试管，并带英文菜单、种子/步数/控制提示、第七种颜色、通关文字和闪烁边框；状态在 `COMMIT` 后于下一 `frame_tick` 原子切换。
 - 测试图/游戏图选择后的 RGB、HS、VS 必须统一经过 `vga_output_register` 寄存后再接顶层管脚，不能把基于 `pixel_x/pixel_y` 的组合译码直接输出；否则计数器位翻转毛刺会在色条或游戏图形中形成固定竖线。
 
 ### Vivado 导入清单
@@ -130,14 +134,14 @@ vga_vs    -> B12
 
 - `top.v`
 - CPU：`code/SCPU.v`、`code/RF.v`、`code/ctrl.v`、`code/ctrl_encode_def.v`、`code/alu.v`、`code/EXT.v`、`code/dm_controller.v`
-- IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/keyboard_event_mmio.v`、`IO/game_state_mmio.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`、`IO/vga_game_pattern.v`、`IO/vga_output_register.v`
+- IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/keyboard_event_mmio.v`、`IO/game_state_mmio.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`、`IO/vga_game_text.v`、`IO/vga_game_pattern.v`、`IO/vga_output_register.v`
 - 外设：`edf_file/MIO_BUS.V`，以及 `edf_file/Multi_8CH32.v/.edf`、`edf_file/SPIO.v/.edf`、`edf_file/SSeg7.v/.edf`
 - 约束：只使用当前 `icf.xdc`
 - IP：保留现有 `ROM_D` 和 `RAM_B`，本次不修改或重新生成
 
 `code/simulation/*`、`code/dm.v`、`code/im.v` 只用于仿真；`archive/`、`ref/`、`asm2coe/`、`tmp/` 不加入 Vivado 工程。完成导入后设置顶层为 `top`，依次执行综合、实现和生成 bitstream。
 
-完整裸机固件位于 `software/water_sort/fpga/`，使用 GNU `riscv64-unknown-elf-*` 生成 `coe/water_sort_game_i.coe` 和 `coe/water_sort_game_d.coe`。启动时执行 `isa_coverage.S`，实际覆盖全部 37 条已实现指令。2026-07-10 构建结果为 `.text` 1396 字节、`.bss` 46 字节；真实 `SCPU` 整机仿真已按已知解完成 21 步通关，COE 已纳入仓库，仍需实际上板确认。
+完整裸机固件位于 `software/water_sort/fpga/`。2026-07-10 Step 6 构建结果为 `.text` 3160 字节、`.rodata` 136 字节、`.bss` 2112 字节，保留至少 512 字节栈；真实 `SCPU` 已通过菜单输入、困难关卡、倾倒、撤销、同种子重开和返回菜单整机仿真，COE 已纳入仓库，仍需上板确认。
 
 ### 流水线与时钟约束
 

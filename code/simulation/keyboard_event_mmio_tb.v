@@ -116,6 +116,31 @@ module keyboard_event_mmio_tb;
         end
         check32("ack/new event race", {24'b0, key_code}, 32'h5);
         check32("ack/new ready", {31'b0, key_ready}, 32'h1);
+        ack_event();
+
+        send_scan(8'h3c); // U
+        check32("undo code", {24'b0, key_code}, 32'h6);
+        ack_event();
+        send_scan(8'h3a); // M
+        check32("menu code", {24'b0, key_code}, 32'h7);
+        ack_event();
+        send_scan(8'h66); // Backspace
+        check32("backspace code", {24'b0, key_code}, 32'h8);
+        ack_event();
+        send_scan(8'h45); // 0
+        check32("digit zero code", {24'b0, key_code}, 32'h10);
+        ack_event();
+        send_scan(8'h46); // 9
+        check32("digit nine code", {24'b0, key_code}, 32'h19);
+        ack_event();
+
+        addr = 32'hd000000c;
+        #1 write_data = read_data;
+        repeat (2) @(posedge clk);
+        if (read_data === write_data) begin
+            errors = errors + 1;
+            $display("FAIL: free-running random counter did not advance");
+        end
 
         if (errors == 0)
             $display("PASS: keyboard event MMIO test completed");

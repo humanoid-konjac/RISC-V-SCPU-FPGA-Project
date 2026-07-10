@@ -11,7 +11,10 @@ module game_state_mmio(
     output reg  [31:0]  read_data,
     output wire [255:0] active_tubes,
     output reg  [31:0]  active_ui,
-    output reg  [31:0]  active_move_count
+    output reg  [31:0]  active_move_count,
+    output reg  [31:0]  active_meta,
+    output reg  [31:0]  active_seed_lo,
+    output reg  [31:0]  active_seed_hi
 );
     localparam [11:0] ADDR_TUBE0 = 12'h020;
     localparam [11:0] ADDR_TUBE1 = 12'h024;
@@ -24,6 +27,9 @@ module game_state_mmio(
     localparam [11:0] ADDR_UI    = 12'h040;
     localparam [11:0] ADDR_MOVES = 12'h044;
     localparam [11:0] ADDR_COMMIT = 12'h048;
+    localparam [11:0] ADDR_META = 12'h04c;
+    localparam [11:0] ADDR_SEED_LO = 12'h050;
+    localparam [11:0] ADDR_SEED_HI = 12'h054;
 
     reg [31:0] shadow_tube [0:7];
     reg [31:0] pending_tube [0:7];
@@ -33,6 +39,9 @@ module game_state_mmio(
     reg [31:0] pending_ui;
     reg [31:0] pending_move_count;
     reg        commit_pending;
+    reg [31:0] shadow_meta, pending_meta;
+    reg [31:0] shadow_seed_lo, pending_seed_lo;
+    reg [31:0] shadow_seed_hi, pending_seed_hi;
     integer i;
 
     genvar tube_index;
@@ -50,6 +59,9 @@ module game_state_mmio(
             pending_move_count <= 32'b0;
             active_ui <= 32'b0;
             active_move_count <= 32'b0;
+            shadow_meta <= 0; pending_meta <= 0; active_meta <= 0;
+            shadow_seed_lo <= 0; pending_seed_lo <= 0; active_seed_lo <= 0;
+            shadow_seed_hi <= 0; pending_seed_hi <= 0; active_seed_hi <= 0;
             commit_pending <= 1'b0;
             for (i = 0; i < 8; i = i + 1) begin
                 shadow_tube[i] <= 32'b0;
@@ -62,6 +74,9 @@ module game_state_mmio(
                     active_tube[i] <= pending_tube[i];
                 active_ui <= pending_ui;
                 active_move_count <= pending_move_count;
+                active_meta <= pending_meta;
+                active_seed_lo <= pending_seed_lo;
+                active_seed_hi <= pending_seed_hi;
                 commit_pending <= 1'b0;
             end
 
@@ -77,11 +92,17 @@ module game_state_mmio(
                     ADDR_TUBE7: shadow_tube[7] <= write_data;
                     ADDR_UI: shadow_ui <= write_data;
                     ADDR_MOVES: shadow_move_count <= write_data;
+                    ADDR_META: shadow_meta <= write_data;
+                    ADDR_SEED_LO: shadow_seed_lo <= write_data;
+                    ADDR_SEED_HI: shadow_seed_hi <= write_data;
                     ADDR_COMMIT: begin
                         for (i = 0; i < 8; i = i + 1)
                             pending_tube[i] <= shadow_tube[i];
                         pending_ui <= shadow_ui;
                         pending_move_count <= shadow_move_count;
+                        pending_meta <= shadow_meta;
+                        pending_seed_lo <= shadow_seed_lo;
+                        pending_seed_hi <= shadow_seed_hi;
                         commit_pending <= 1'b1;
                     end
                     default: ;
@@ -102,6 +123,9 @@ module game_state_mmio(
             ADDR_TUBE7: read_data = shadow_tube[7];
             ADDR_UI: read_data = shadow_ui;
             ADDR_MOVES: read_data = shadow_move_count;
+            ADDR_META: read_data = shadow_meta;
+            ADDR_SEED_LO: read_data = shadow_seed_lo;
+            ADDR_SEED_HI: read_data = shadow_seed_hi;
             default: read_data = 32'b0;
         endcase
     end

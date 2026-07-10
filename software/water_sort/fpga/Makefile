@@ -18,12 +18,13 @@ ELF := $(BUILD_DIR)/$(TARGET).elf
 I_BIN := $(BUILD_DIR)/$(TARGET)_i.bin
 D_BIN := $(BUILD_DIR)/$(TARGET)_d.bin
 I_MEM := $(BUILD_DIR)/$(TARGET)_i.mem
+D_MEM := $(BUILD_DIR)/$(TARGET)_d.mem
 I_COE := $(ROOT)/coe/water_sort_game_i.coe
 D_COE := $(ROOT)/coe/water_sort_game_d.coe
 
 .PHONY: all clean size disasm
 
-all: $(I_COE) $(D_COE) $(I_MEM) $(BUILD_DIR)/$(TARGET).asm size
+all: $(I_COE) $(D_COE) $(I_MEM) $(D_MEM) $(BUILD_DIR)/$(TARGET).asm size
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -56,6 +57,10 @@ $(D_BIN): $(ELF)
 $(I_MEM): $(I_BIN)
 	hexdump -v -e '1/4 "%08x\n"' $< | \
 		awk '{print} END {for (i=NR; i<1024; i++) print "00000013"}' > $@
+
+$(D_MEM): $(D_BIN)
+	hexdump -v -e '1/4 "%08x\n"' $< | \
+		awk '{print} END {for (i=NR; i<1024; i++) print "00000000"}' > $@
 
 $(I_COE): $(I_BIN)
 	{ printf 'MEMORY_INITIALIZATION_RADIX=16;\nMEMORY_INITIALIZATION_VECTOR=\n'; \

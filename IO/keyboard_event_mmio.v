@@ -19,14 +19,20 @@ module keyboard_event_mmio(
     localparam [7:0] KEY_CONFIRM = 8'd3;
     localparam [7:0] KEY_CANCEL  = 8'd4;
     localparam [7:0] KEY_RESTART = 8'd5;
+    localparam [7:0] KEY_UNDO    = 8'd6;
+    localparam [7:0] KEY_MENU    = 8'd7;
+    localparam [7:0] KEY_BACKSPACE = 8'd8;
+    localparam [7:0] KEY_DIGIT0  = 8'd16;
 
     localparam [11:0] ADDR_STATUS = 12'h000;
     localparam [11:0] ADDR_CODE   = 12'h004;
     localparam [11:0] ADDR_ACK    = 12'h008;
+    localparam [11:0] ADDR_RANDOM = 12'h00c;
 
     reg break_pending;
     reg extended_pending;
     reg [7:0] decoded_code;
+    reg [31:0] entropy_counter = 32'h6d2b79f5;
 
     wire ack_write = write_en && (addr[11:0] == ADDR_ACK) && write_data[0];
 
@@ -46,10 +52,26 @@ module keyboard_event_mmio(
                 8'h29: decoded_code = KEY_CONFIRM; // Space
                 8'h76: decoded_code = KEY_CANCEL;  // Esc
                 8'h2d: decoded_code = KEY_RESTART; // R
+                8'h3c: decoded_code = KEY_UNDO;    // U
+                8'h3a: decoded_code = KEY_MENU;    // M
+                8'h66: decoded_code = KEY_BACKSPACE;
+                8'h45: decoded_code = KEY_DIGIT0 + 0;
+                8'h16: decoded_code = KEY_DIGIT0 + 1;
+                8'h1e: decoded_code = KEY_DIGIT0 + 2;
+                8'h26: decoded_code = KEY_DIGIT0 + 3;
+                8'h25: decoded_code = KEY_DIGIT0 + 4;
+                8'h2e: decoded_code = KEY_DIGIT0 + 5;
+                8'h36: decoded_code = KEY_DIGIT0 + 6;
+                8'h3d: decoded_code = KEY_DIGIT0 + 7;
+                8'h3e: decoded_code = KEY_DIGIT0 + 8;
+                8'h46: decoded_code = KEY_DIGIT0 + 9;
                 default: decoded_code = KEY_NONE;
             endcase
         end
     end
+
+    always @(posedge clk)
+        entropy_counter <= entropy_counter + 32'h9e3779b9;
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
@@ -86,6 +108,7 @@ module keyboard_event_mmio(
         case (addr[11:0])
             ADDR_STATUS: read_data = {31'b0, key_ready};
             ADDR_CODE:   read_data = {24'b0, key_code};
+            ADDR_RANDOM: read_data = entropy_counter;
             default:     read_data = 32'b0;
         endcase
     end

@@ -1,85 +1,39 @@
-#include <stdio.h>
-
 #include "water_sort.h"
 
-static char color_symbol(uint8_t color)
-{
-    static const char symbols[] = ".RGBYPC";
+#include <stdio.h>
 
-    if (color > WATER_SORT_COLOR_COUNT) {
-        return '?';
-    }
-    return symbols[color];
-}
-
-static void draw_game(const WaterSortGame *game)
+static void print_game(const WaterSortGame *game)
 {
     int layer;
-    uint8_t tube_index;
-
-    puts("");
-    for (layer = WATER_SORT_TUBE_CAPACITY - 1; layer >= 0; --layer) {
-        for (tube_index = 0; tube_index < WATER_SORT_TUBE_COUNT; ++tube_index) {
-            printf("|%c| ", color_symbol(game->tube[tube_index][layer]));
-        }
+    uint8_t tube;
+    for (layer = 3; layer >= 0; --layer) {
+        for (tube = 0; tube < game->tube_count; ++tube)
+            printf(" %u ", game->tube[tube][layer]);
         putchar('\n');
     }
-    for (tube_index = 0; tube_index < WATER_SORT_TUBE_COUNT; ++tube_index) {
-        printf(" %u  ", (unsigned)tube_index);
-    }
-    putchar('\n');
-    for (tube_index = 0; tube_index < WATER_SORT_TUBE_COUNT; ++tube_index) {
-        printf(game->cursor == tube_index ? " ^  " : "    ");
-    }
-    putchar('\n');
-
-    printf("moves=%u  selected=", (unsigned)game->move_count);
-    if (game->selected_source == WATER_SORT_NO_SELECTION) {
-        puts("none");
-    } else {
-        printf("%u\n", (unsigned)game->selected_source);
-    }
-    if (game->finished) {
-        puts("Solved! Press r to restart or q to quit.");
-    }
+    for (tube = 0; tube < game->tube_count; ++tube)
+        printf(game->cursor == tube ? " ^ " : "   ");
+    printf("\nseed=%u moves=%u\n", (unsigned)game->seed,
+           (unsigned)game->move_count);
 }
 
 int main(void)
 {
     WaterSortGame game;
-    char line[32];
-
-    water_sort_reset(&game);
-    puts("Water Sort host test: a=left, d=right, e=confirm, x=cancel, r=restart, q=quit");
-
+    int command;
+    water_sort_start(&game, WATER_SORT_NORMAL, 1);
+    puts("a/d move, e confirm, c cancel, u undo, r restart, q quit");
     for (;;) {
-        draw_game(&game);
-        fputs("> ", stdout);
-        if (fgets(line, sizeof(line), stdin) == NULL || line[0] == 'q') {
+        print_game(&game);
+        command = getchar();
+        if (command == EOF || command == 'q')
             break;
-        }
-
-        switch (line[0]) {
-        case 'a':
-            water_sort_move_cursor(&game, -1);
-            break;
-        case 'd':
-            water_sort_move_cursor(&game, 1);
-            break;
-        case 'e':
-            (void)water_sort_confirm(&game);
-            break;
-        case 'x':
-            water_sort_cancel(&game);
-            break;
-        case 'r':
-            water_sort_reset(&game);
-            break;
-        default:
-            puts("Unknown command.");
-            break;
-        }
+        if (command == 'a') water_sort_move_cursor(&game, -1);
+        if (command == 'd') water_sort_move_cursor(&game, 1);
+        if (command == 'e') (void)water_sort_confirm(&game);
+        if (command == 'c') water_sort_cancel(&game);
+        if (command == 'u') (void)water_sort_undo(&game);
+        if (command == 'r') water_sort_restart(&game);
     }
-
     return 0;
 }

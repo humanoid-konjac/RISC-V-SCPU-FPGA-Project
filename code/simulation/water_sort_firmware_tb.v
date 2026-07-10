@@ -33,13 +33,17 @@ module water_sort_firmware_tb;
     wire [255:0] active_tubes;
     wire [31:0] active_ui;
     wire [31:0] active_move_count;
+    wire [31:0] active_meta;
+    wire [31:0] active_seed_lo;
+    wire [31:0] active_seed_hi;
 
     reg [31:0] imem [0:1023];
     reg [31:0] dmem [0:1023];
     reg [31:0] led_value;
     reg [31:0] display_value;
-    reg [2:0] move_source [0:20];
-    reg [2:0] move_target [0:20];
+    reg [255:0] initial_tubes;
+    integer source_index;
+    integer target_index;
     integer i;
     integer errors;
     integer cursor_model;
@@ -99,7 +103,10 @@ module water_sort_firmware_tb;
         .read_data(state_read_data),
         .active_tubes(active_tubes),
         .active_ui(active_ui),
-        .active_move_count(active_move_count)
+        .active_move_count(active_move_count),
+        .active_meta(active_meta),
+        .active_seed_lo(active_seed_lo),
+        .active_seed_hi(active_seed_hi)
     );
 
     always @(posedge clk) begin
@@ -184,55 +191,69 @@ module water_sort_firmware_tb;
             dmem[i] = 32'b0;
         end
         $readmemh("software/water_sort/fpga/build/water_sort_game_i.mem", imem);
-
-        move_source[0]=0; move_target[0]=6;
-        move_source[1]=1; move_target[1]=0;
-        move_source[2]=1; move_target[2]=6;
-        move_source[3]=0; move_target[3]=1;
-        move_source[4]=0; move_target[4]=6;
-        move_source[5]=1; move_target[5]=0;
-        move_source[6]=1; move_target[6]=6;
-        move_source[7]=2; move_target[7]=1;
-        move_source[8]=3; move_target[8]=2;
-        move_source[9]=3; move_target[9]=1;
-        move_source[10]=2; move_target[10]=3;
-        move_source[11]=2; move_target[11]=1;
-        move_source[12]=3; move_target[12]=2;
-        move_source[13]=1; move_target[13]=3;
-        move_source[14]=4; move_target[14]=1;
-        move_source[15]=5; move_target[15]=4;
-        move_source[16]=5; move_target[16]=1;
-        move_source[17]=4; move_target[17]=5;
-        move_source[18]=4; move_target[18]=1;
-        move_source[19]=5; move_target[19]=4;
-        move_source[20]=1; move_target[20]=5;
+        $readmemh("software/water_sort/fpga/build/water_sort_game_d.mem", dmem);
 
         repeat (5) @(posedge clk);
         rst = 1'b0;
 
-        // Initial publish ends with cursor LED bit 0 set.
-        wait (led_value == 32'h00000001);
+        // Firmware boots into the menu at NORMAL difficulty.
+        wait (led_value == 32'h00000002);
         pulse_frame();
-        check32("initial tube 0", active_tubes[31:0], 32'h00002121);
-        check32("initial tube 6 empty", active_tubes[223:192], 32'h0);
-        check32("initial UI", active_ui, 32'h0);
+        check32("menu UI", active_ui, 32'h0);
+        check32("normal menu meta", active_meta & 32'hff, 32'h71);
 
-        for (i = 0; i < 21; i = i + 1) begin
-            move_cursor_to(move_source[i]);
-            send_scan_and_wait(8'h5a); // Enter selects source
-            move_cursor_to(move_target[i]);
-            send_scan_and_wait(8'h5a); // Enter pours
+        // Type decimal seed 123, select HARD, and start.
+        send_scan_and_wait(8'h16);
+        send_scan_and_wait(8'h1e);
+        send_scan_and_wait(8'h26);
+        send_scan_and_wait(8'h23);
+        send_scan_and_wait(8'h5a);
+        pulse_frame();
+        check32("playing UI", active_ui, 32'h00000200);
+        check32("hard game meta", active_meta & 32'hff, 32'h82);
+        check32("seed low BCD", active_seed_lo, 32'h00000123);
+        check32("seed high BCD", active_seed_hi, 32'h0);
+        initial_tubes = active_tubes;
+
+        source_index = -1;
+        target_index = -1;
+        for (i = 0; i < 8; i = i + 1) begin
+            if (active_tubes[i*32 +: 16] == 0)
+                target_index = i;
+            else if (source_index < 0)
+                source_index = i;
         end
+        if (source_index < 0 || target_index < 0) begin
+            errors = errors + 1;
+            $display("FAIL: generated game lacks source or empty target");
+        end else begin
+            move_cursor_to(source_index[2:0]);
+            send_scan_and_wait(8'h5a);
+            move_cursor_to(target_index[2:0]);
+            send_scan_and_wait(8'h5a);
+            pulse_frame();
+            check32("move count after pour", active_move_count, 32'd1);
 
-        pulse_frame();
-        check32("winning UI", active_ui, 32'h00000105);
-        check32("move count", active_move_count, 32'd21);
-        check32("seven segment move count", display_value, 32'd21);
-        check32("winning LEDs", led_value, 32'h0000ffff);
-        check32("red solved tube", active_tubes[31:0], 32'h00001111);
-        check32("blue solved tube", active_tubes[95:64], 32'h00003333);
-        check32("cyan solved tube", active_tubes[191:160], 32'h00006666);
-        check32("green solved tube", active_tubes[223:192], 32'h00002222);
+            send_scan_and_wait(8'h3c); // U
+            cursor_model = source_index;
+            pulse_frame();
+            check32("undo move count", active_move_count, 32'd0);
+            if (active_tubes !== initial_tubes) begin
+                errors = errors + 1;
+                $display("FAIL: undo did not restore generated board");
+            end
+
+            send_scan_and_wait(8'h2d); // R restart same seed
+            cursor_model = 0;
+            pulse_frame();
+            if (active_tubes !== initial_tubes) begin
+                errors = errors + 1;
+                $display("FAIL: restart did not reproduce generated board");
+            end
+            send_scan_and_wait(8'h3a); // M menu
+            pulse_frame();
+            check32("return to menu", active_ui & 32'h200, 32'h0);
+        end
 
         if (errors == 0)
             $display("PASS: water sort firmware integration test completed");

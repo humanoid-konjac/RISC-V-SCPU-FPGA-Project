@@ -1,168 +1,144 @@
-#include <assert.h>
-#include <stdio.h>
-
 #include "water_sort.h"
 
-static void clear_test_game(WaterSortGame *game)
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+
+static void verify_generated(WaterSortDifficulty difficulty, uint32_t seed)
 {
-    uint8_t tube_index;
+    WaterSortGame a;
+    WaterSortGame b;
+    uint8_t counts[WATER_SORT_MAX_COLORS + 1] = {0};
+    uint8_t expected_colors = difficulty == WATER_SORT_EASY ? 4 :
+                              difficulty == WATER_SORT_HARD ? 7 : 6;
+    uint8_t expected_tubes = expected_colors +
+                             (difficulty == WATER_SORT_EASY ? 2 : 1);
+    uint8_t empty = 0;
+    uint8_t mixed = 0;
+    uint8_t tube;
     uint8_t layer;
 
-    for (tube_index = 0; tube_index < WATER_SORT_TUBE_COUNT; ++tube_index) {
-        game->height[tube_index] = 0;
-        for (layer = 0; layer < WATER_SORT_TUBE_CAPACITY; ++layer) {
-            game->tube[tube_index][layer] = 0;
+    water_sort_start(&a, difficulty, seed);
+    water_sort_start(&b, difficulty, seed);
+    assert(memcmp(a.tube, b.tube, sizeof(a.tube)) == 0);
+    assert(a.tube_count == expected_tubes);
+    assert(a.color_count == expected_colors);
+    assert(a.seed == seed);
+    assert(!a.finished && !water_sort_is_solved(&a));
+    for (tube = 0; tube < a.tube_count; ++tube) {
+        if (a.height[tube] == 0) {
+            ++empty;
+            continue;
+        }
+        assert(a.height[tube] == 4);
+        for (layer = 0; layer < 4; ++layer)
+            ++counts[a.tube[tube][layer]];
+        if (a.tube[tube][0] != a.tube[tube][1] ||
+            a.tube[tube][1] != a.tube[tube][2] ||
+            a.tube[tube][2] != a.tube[tube][3])
+            ++mixed;
+    }
+    assert(empty == (difficulty == WATER_SORT_EASY ? 2 : 1));
+    assert(mixed >= (difficulty == WATER_SORT_EASY ? 3 :
+                     difficulty == WATER_SORT_NORMAL ? 5 : 6));
+    for (tube = 1; tube <= expected_colors; ++tube)
+        assert(counts[tube] == 4);
+    for (tube = expected_tubes; tube < WATER_SORT_MAX_TUBES; ++tube)
+        assert(a.height[tube] == 0 && water_sort_pack_tube(&a, tube) == 0);
+}
+
+static int make_first_legal_move(WaterSortGame *game)
+{
+    uint8_t source;
+    uint8_t target;
+    for (source = 0; source < game->tube_count; ++source) {
+        for (target = 0; target < game->tube_count; ++target) {
+            WaterSortConfirmResult result;
+            WaterSortGame before = *game;
+            game->cursor = source;
+            if (water_sort_confirm(game) != WATER_SORT_CONFIRM_SELECTED) {
+                *game = before;
+                continue;
+            }
+            game->cursor = target;
+            result = water_sort_confirm(game);
+            if (result == WATER_SORT_CONFIRM_MOVED ||
+                result == WATER_SORT_CONFIRM_WON)
+                return 1;
+            *game = before;
         }
     }
-    game->cursor = 0;
-    game->selected_source = WATER_SORT_NO_SELECTION;
-    game->move_count = 0;
-    game->finished = false;
+    return 0;
 }
 
-static WaterSortConfirmResult pour(WaterSortGame *game, uint8_t source,
-                                   uint8_t target)
+static void test_generation(void)
 {
-    WaterSortConfirmResult result;
-
-    game->cursor = source;
-    result = water_sort_confirm(game);
-    assert(result == WATER_SORT_CONFIRM_SELECTED);
-    game->cursor = target;
-    return water_sort_confirm(game);
+    uint32_t seed;
+    int difficulty;
+    for (difficulty = WATER_SORT_EASY; difficulty <= WATER_SORT_HARD;
+         ++difficulty) {
+        for (seed = 0; seed < 10000; ++seed)
+            verify_generated((WaterSortDifficulty)difficulty,
+                             seed * 2654435761u);
+        verify_generated((WaterSortDifficulty)difficulty, 0xffffffffu);
+    }
 }
 
-static void test_reset_and_packing(void)
+static void test_cursor_restart_and_undo(void)
 {
     WaterSortGame game;
+    WaterSortGame initial;
+    unsigned moves = 0;
 
-    water_sort_reset(&game);
-    assert(game.cursor == 0);
-    assert(game.selected_source == WATER_SORT_NO_SELECTION);
-    assert(game.move_count == 0);
-    assert(!game.finished);
-    assert(game.height[0] == 4);
-    assert(game.height[6] == 0);
-    assert(water_sort_pack_tube(&game, 0) == 0x2121u);
-    assert(water_sort_pack_tube(&game, 5) == 0x5656u);
-    assert(water_sort_pack_tube(&game, 8) == 0u);
-}
-
-static void test_cursor_and_selection(void)
-{
-    WaterSortGame game;
-
-    water_sort_reset(&game);
+    water_sort_start(&game, WATER_SORT_HARD, 1234567890u);
+    initial = game;
     water_sort_move_cursor(&game, -1);
-    assert(game.cursor == 7);
+    assert(game.cursor == game.tube_count - 1);
     water_sort_move_cursor(&game, 1);
     assert(game.cursor == 0);
+    while (moves < 32 && make_first_legal_move(&game))
+        ++moves;
+    assert(moves != 0);
+    assert(game.history_length == moves && game.move_count == moves);
+    while (water_sort_undo(&game))
+        ;
+    assert(game.move_count == 0 && game.history_length == 0);
+    assert(memcmp(game.tube, initial.tube, sizeof(game.tube)) == 0);
+    assert(memcmp(game.height, initial.height, sizeof(game.height)) == 0);
+    assert(!water_sort_undo(&game));
 
-    game.cursor = 6;
-    assert(water_sort_confirm(&game) == WATER_SORT_CONFIRM_INVALID);
-    assert(game.selected_source == WATER_SORT_NO_SELECTION);
+    (void)make_first_legal_move(&game);
+    water_sort_restart(&game);
+    assert(memcmp(game.tube, initial.tube, sizeof(game.tube)) == 0);
+    assert(game.move_count == 0 && game.history_length == 0);
+}
 
-    game.cursor = 0;
+static void test_history_full(void)
+{
+    WaterSortGame game;
+    uint8_t source;
+    uint8_t target;
+    water_sort_start(&game, WATER_SORT_EASY, 7);
+    for (source = 0; source < game.tube_count && game.height[source] == 0;
+         ++source)
+        ;
+    for (target = 0; target < game.tube_count && game.height[target] != 0;
+         ++target)
+        ;
+    assert(source < game.tube_count && target < game.tube_count);
+    game.cursor = source;
     assert(water_sort_confirm(&game) == WATER_SORT_CONFIRM_SELECTED);
-    assert(game.selected_source == 0);
-    water_sort_cancel(&game);
-    assert(game.selected_source == WATER_SORT_NO_SELECTION);
-}
-
-static void test_invalid_target_keeps_selection(void)
-{
-    WaterSortGame game;
-
-    water_sort_reset(&game);
-    game.cursor = 0;
-    assert(water_sort_confirm(&game) == WATER_SORT_CONFIRM_SELECTED);
-
-    game.cursor = 1;
-    assert(water_sort_confirm(&game) == WATER_SORT_CONFIRM_INVALID);
-    assert(game.selected_source == 0);
-    assert(game.move_count == 0);
-
-    game.cursor = 0;
-    assert(water_sort_confirm(&game) == WATER_SORT_CONFIRM_INVALID);
-    assert(game.selected_source == 0);
-}
-
-static void test_contiguous_and_capacity_limited_pours(void)
-{
-    WaterSortGame game;
-
-    clear_test_game(&game);
-    game.tube[0][0] = 1;
-    game.tube[0][1] = 2;
-    game.tube[0][2] = 2;
-    game.tube[0][3] = 2;
-    game.height[0] = 4;
-    game.tube[1][0] = 3;
-    game.tube[1][1] = 3;
-    game.tube[1][2] = 2;
-    game.height[1] = 3;
-
-    assert(pour(&game, 0, 1) == WATER_SORT_CONFIRM_MOVED);
-    assert(game.height[0] == 3);
-    assert(game.height[1] == 4);
-    assert(game.tube[0][2] == 2);
-    assert(game.tube[0][3] == 0);
-    assert(game.tube[1][3] == 2);
-    assert(game.move_count == 1);
-
-    clear_test_game(&game);
-    game.tube[0][0] = 1;
-    game.tube[0][1] = 2;
-    game.tube[0][2] = 2;
-    game.height[0] = 3;
-    assert(pour(&game, 0, 1) == WATER_SORT_CONFIRM_MOVED);
-    assert(game.height[0] == 1);
-    assert(game.height[1] == 2);
-    assert(game.tube[1][0] == 2);
-    assert(game.tube[1][1] == 2);
-}
-
-static void test_known_solution(void)
-{
-    static const uint8_t moves[][2] = {
-        {0, 6}, {1, 0}, {1, 6}, {0, 1}, {0, 6}, {1, 0}, {1, 6},
-        {2, 1}, {3, 2}, {3, 1}, {2, 3}, {2, 1}, {3, 2}, {1, 3},
-        {4, 1}, {5, 4}, {5, 1}, {4, 5}, {4, 1}, {5, 4}, {1, 5}
-    };
-    WaterSortGame game;
-    unsigned move_index;
-
-    water_sort_reset(&game);
-    for (move_index = 0; move_index < sizeof(moves) / sizeof(moves[0]);
-         ++move_index) {
-        WaterSortConfirmResult result =
-            pour(&game, moves[move_index][0], moves[move_index][1]);
-        if (move_index + 1 == sizeof(moves) / sizeof(moves[0])) {
-            assert(result == WATER_SORT_CONFIRM_WON);
-        } else {
-            assert(result == WATER_SORT_CONFIRM_MOVED);
-        }
-    }
-
-    assert(game.finished);
-    assert(water_sort_is_solved(&game));
-    assert(game.move_count == 21);
-    assert(water_sort_confirm(&game) == WATER_SORT_CONFIRM_INVALID);
-    water_sort_move_cursor(&game, 1);
-    assert(game.cursor == 5);
-
-    water_sort_reset(&game);
-    assert(!game.finished);
-    assert(game.move_count == 0);
+    game.cursor = target;
+    game.history_length = WATER_SORT_HISTORY_CAPACITY;
+    assert(water_sort_confirm(&game) == WATER_SORT_CONFIRM_HISTORY_FULL);
+    assert(game.history_full && game.move_count == 0);
 }
 
 int main(void)
 {
-    test_reset_and_packing();
-    test_cursor_and_selection();
-    test_invalid_target_keeps_selection();
-    test_contiguous_and_capacity_limited_pours();
-    test_known_solution();
-    puts("PASS: water_sort host tests");
+    test_generation();
+    test_cursor_restart_and_undo();
+    test_history_full();
+    puts("water_sort tests passed (30003 seeded levels)");
     return 0;
 }
