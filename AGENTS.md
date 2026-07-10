@@ -33,8 +33,8 @@
    当前选定应用为 8 试管、6 颜色、2 空管的倒水排序游戏。C 程序负责游戏规则和状态，Verilog 负责按键事件锁存、MMIO 状态寄存器与 VGA 实时渲染，不使用完整帧缓冲。开发子进度如下：
 
    - [x] Step 1：在电脑端完成纯 C 游戏逻辑，包括固定关卡、光标与选择、倾倒合法性、连续同色移动、胜利判断、取消和重新开始；通过主机单元测试后再移植。（2026-07-10 已实现，严格警告编译、21 步通关回放和 sanitizer 检查通过）
-   - [x] Step 2：增加带锁存和确认机制的键盘 MMIO，建立裸机 C 启动、链接和双 COE 构建流程，并用 LED/数码管验证 CPU 不漏读按键。（2026-07-10 RTL 仿真通过，待上板）
-   - [x] Step 3：增加游戏状态 MMIO、shadow/commit 帧边界切换，先用按键控制 VGA 色块，验证“键盘 -> CPU -> MMIO -> VGA”完整链路。（2026-07-10 模块仿真、旧功能回归和顶层展开通过，待上板）
+   - [x] Step 2：增加带锁存和确认机制的键盘 MMIO，建立裸机 C 启动、链接和双 COE 构建流程，并用 LED/数码管验证 CPU 不漏读按键。（2026-07-10 RTL 仿真和固件构建通过，待上板）
+   - [x] Step 3：增加游戏状态 MMIO、shadow/commit 帧边界切换，先用按键控制 VGA 色块，验证“键盘 -> CPU -> MMIO -> VGA”完整链路。（2026-07-10 模块仿真、旧功能回归、顶层展开和固件构建通过，待上板）
    - [ ] Step 4：实现 8 根固定试管的 VGA 实时渲染，验证颜色、层序、位置、光标和来源选中效果。
    - [ ] Step 5：移植完整 C 游戏主循环，接通键盘、试管状态、步数、LED 和通关效果，完成整机仿真与上板验收。
    - [ ] Step 6：在第一版稳定后再评估撤销、多关卡、倾倒动画、计时、通关动画和伪随机选关；这些功能不属于第一版完成条件。
@@ -136,7 +136,7 @@ vga_vs    -> B12
 
 `code/simulation/*`、`code/dm.v`、`code/im.v` 只用于仿真；`archive/`、`ref/`、`asm2coe/`、`tmp/` 不加入 Vivado 工程。完成导入后设置顶层为 `top`，依次执行综合、实现和生成 bitstream。
 
-Step 2/3 裸机固件位于 `software/water_sort/fpga/`，使用 GNU `riscv64-unknown-elf-*` 生成 `coe/game_phase3_i.coe` 和 `coe/game_phase3_d.coe`。当前本机未安装该工具链，所以只验证了 C 语法、Makefile 依赖、RTL 和顶层展开；生成 COE 后仍需实际上板确认。
+Step 2/3 裸机固件位于 `software/water_sort/fpga/`，使用 GNU `riscv64-unknown-elf-*` 生成 `coe/game_phase3_i.coe` 和 `coe/game_phase3_d.coe`。2026-07-10 已完成 RV32I 构建，指令段 268 字节，实际反汇编仅包含当前 CPU 支持的 RV32I 指令；COE 已纳入仓库，仍需实际上板确认。
 
 ### 流水线与时钟约束
 
