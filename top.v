@@ -57,6 +57,9 @@ module top(
     wire [31:0] game_mmio_data;
     wire        game_key_ready;
     wire  [7:0] game_key_code;
+    wire        cpu_interrupt_request;
+    reg         game_key_ready_d;
+    reg         counter0_out_d;
     wire [255:0] game_active_tubes;
     wire [31:0] game_active_ui;
     wire [31:0] game_active_move_count;
@@ -111,6 +114,8 @@ module top(
                         (Addr_out[31:12] == 20'h10000);
     assign game_access = (Addr_out[31:12] == 20'hd0000);
     assign game_write_en = cpu_en && mem_w && game_access;
+    assign cpu_interrupt_request = (game_key_ready && !game_key_ready_d) ||
+                                   (counter0_OUT && !counter0_out_d);
     assign game_mmio_data = keyboard_mmio_data | game_state_mmio_data;
     assign wea_mem = ram_access ? wea_mem_raw : 4'b0000;
     assign Data_in = ram_access ? Data_in_dm :
@@ -122,10 +127,15 @@ module top(
                               {test_vga_r, test_vga_g, test_vga_b};
 
     always @(posedge clk or posedge rst_i) begin
-        if (rst_i)
+        if (rst_i) begin
             Clk_CPU_d <= 1'b0;
-        else
+            game_key_ready_d <= 1'b0;
+            counter0_out_d <= 1'b0;
+        end else begin
             Clk_CPU_d <= Clk_CPU;
+            game_key_ready_d <= game_key_ready;
+            counter0_out_d <= counter0_OUT;
+        end
     end
 
     Enter U10_Enter(
@@ -157,7 +167,7 @@ module top(
         .Data_out(Data_out),
         .dm_ctrl(dm_ctrl),
         .CPU_MIO(CPU_MIO),
-        .INT(counter0_OUT)
+        .INT(cpu_interrupt_request)
     );
 
     ROM_D U2_ROMD(

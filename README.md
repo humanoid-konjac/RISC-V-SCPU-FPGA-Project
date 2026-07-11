@@ -75,7 +75,7 @@ vga_vs      -> B12
 最终复杂应用选定为倒水排序游戏。当前版本支持简单（4 色/2 空管）、普通（6 色/1 空管）和困难（7 色/1 空管）三档，每档 12 个离线生成并经 BFS 验证的关卡；C 程序负责关卡、规则、撤销、计步和菜单，Verilog 负责 PS/2 事件、MMIO 状态与 VGA 实时渲染。
 
 ```text
-PS/2 键盘 -> 按键事件寄存器 -> MMIO -> CPU/C 游戏逻辑
+PS/2 键盘 -> 按键事件寄存器 -> CPU 中断 -> C 中断处理函数
                                       -> shadow 状态 + COMMIT
                                       -> VGA 字符/试管渲染器
 ```
@@ -98,6 +98,8 @@ PS/2 键盘 -> 按键事件寄存器 -> MMIO -> CPU/C 游戏逻辑
 | `0xd000_004c` | R/W | 难度、有效管数和步数 BCD metadata |
 | `0xd000_0050` | R/W | 当前输入/游玩的两位 BCD 关卡号 |
 
+键盘事件置位 `key_ready` 后触发 CPU 的机器模式中断。裸机 trap 入口保存全部整数寄存器，C 中断处理函数读取事件、更新游戏、提交画面并写 `KEY_ACK`，随后恢复现场并执行 `mret`；主循环不再轮询键盘。键盘和原计数器请求在顶层分别检测上升沿后共用 CPU 的单个 `INT` 输入，ISR 通过 `KEY_STATUS` 判断是否存在键盘事件。
+
 游戏寄存器使用 shadow、pending、active 三组状态。CPU 写 `COMMIT` 时固定 pending 快照，VGA 在下一个 `frame_tick` 整体更新 active；即使 CPU 在帧边界前继续写 shadow，也不会污染已经提交的画面。MMIO 写脉冲由 `cpu_en && mem_w` 限定，避免流水线暂停时重复 ACK 或 COMMIT。
 
 ### 分阶段计划
@@ -114,8 +116,9 @@ PS/2 键盘 -> 按键事件寄存器 -> MMIO -> CPU/C 游戏逻辑
   - [x] **6.4 菜单与输入。** 支持上下选难度、左右选关、数字输入 `1～12`、重开当前关和返回菜单。
   - [x] **6.5 文字 UI。** 完成 5×7 英文字库、顶部状态、底部按键提示、`YOU WIN` 与 `HISTORY FULL`；已通过仿真，待上板验收。
   - [x] **6.6 生成流程。** 加入可复现生成脚本、目录一致性检查和 `LEVEL_GENERATION.md`，36 关均有 BFS 可解性与最短解记录。
+- [x] **Step 7：键盘中断驱动。** `key_ready` 触发机器模式中断，trap 入口完整保存/恢复整数寄存器并调用 C ISR；真实 `SCPU` 完整游戏交互仿真通过，待上板验收。
 
-游戏核心位于 `software/water_sort/`，生成流程见 `software/water_sort/LEVEL_GENERATION.md`，裸机固件位于 `software/water_sort/fpga/`。2026-07-10 已验证全部 36 关并通过 sanitizer、MMIO/VGA、PS/2/VGA 回归、37 指令流水线、中断异常、顶层展开及真实 `SCPU` 关卡输入/倾倒/撤销/重开整机仿真。当前 `.text` 2888 字节、`.rodata` 576 字节、`.bss` 2112 字节，仍满足 4 KiB ROM/RAM 与 512 字节保留栈约束。
+游戏核心位于 `software/water_sort/`，生成流程见 `software/water_sort/LEVEL_GENERATION.md`，裸机固件位于 `software/water_sort/fpga/`。2026-07-11 已将游戏键盘输入改为机器模式中断驱动，并通过真实 `SCPU` 完整交互仿真；全部 36 关、sanitizer、MMIO/VGA、PS/2/VGA、37 指令流水线和中断异常回归保持通过。当前 `.text` 3204 字节、`.rodata` 576 字节、`.bss` 2112 字节，仍满足 4 KiB ROM/RAM 与 512 字节保留栈约束。
 
 ## CPU 实现
 

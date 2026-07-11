@@ -10,6 +10,8 @@ static bool level_editing;
 static bool input_error;
 static uint8_t level_entry;
 
+extern void enable_keyboard_interrupts(void);
+
 static uint16_t pack_moves_bcd(uint16_t value)
 {
     uint16_t packed = 0;
@@ -186,6 +188,19 @@ static void handle_game_event(uint32_t event)
     }
 }
 
+void keyboard_interrupt_handler(void)
+{
+    if ((KEY_STATUS & 1u) != 0u) {
+        uint32_t event = KEY_CODE;
+        if (playing)
+            handle_game_event(event);
+        else
+            handle_menu_event(event);
+        publish_state();
+        KEY_ACK = 1;
+    }
+}
+
 int main(void)
 {
     water_sort_start(&game, WATER_SORT_NORMAL, 0);
@@ -194,15 +209,7 @@ int main(void)
     input_error = false;
     level_entry = 1;
     publish_state();
-    for (;;) {
-        if ((KEY_STATUS & 1u) != 0u) {
-            uint32_t event = KEY_CODE;
-            if (playing)
-                handle_game_event(event);
-            else
-                handle_menu_event(event);
-            publish_state();
-            KEY_ACK = 1;
-        }
-    }
+    enable_keyboard_interrupts();
+    for (;;)
+        __asm__ volatile ("nop");
 }

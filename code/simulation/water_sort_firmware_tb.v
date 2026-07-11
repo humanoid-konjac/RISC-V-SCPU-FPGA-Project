@@ -65,7 +65,7 @@ module water_sort_firmware_tb;
         .Data_out(cpu_write_data),
         .dm_ctrl(dm_ctrl),
         .CPU_MIO(cpu_mio),
-        .INT(1'b0)
+        .INT(key_ready)
     );
 
     dm_controller U_DM_CONTROLLER(
