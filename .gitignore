@@ -53,4 +53,3 @@ software/water_sort/fpga/build/
 *.swo
 *.tmp
 *.bak
-!archive/*.bak
