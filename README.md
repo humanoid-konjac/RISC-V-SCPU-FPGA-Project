@@ -1,147 +1,145 @@
 # RISC-V SCPU FPGA Project
 
-这是一个用于 Vivado 下板的五级流水线 RISC-V CPU 工程。当前版本使用自写 `SCPU` 和 `dm_controller`，保留了参考工程中可用的 IO/显示/总线模块。
+这是一个面向 Nexys4 A7-100T（`xc7a100tcsg324-1`）的计算机系统综合设计项目。项目在自研 RV32I 五级流水线 CPU 上实现中断/异常、PS/2 键盘、VGA 输出和裸机 C 应用，最终应用为倒水排序游戏。
 
-## 目录结构
+当前 `game` 分支是课程验收通过的最终交付版本。游戏包含三档难度、每档 12 个离线求解验证关卡、2048 步撤销、英文菜单和完整板级交互；键盘输入使用机器模式中断，画面不使用帧缓冲。
 
-- `top.v`: FPGA 顶层，连接 CPU、ROM、RAM、外设总线、数码管、LED、按键、开关、PS/2 键盘和 VGA。
-- `code/`: 自写 CPU RTL，包括五级流水线 CPU、控制器、ALU、寄存器堆、立即数扩展、访存控制等。
-- `IO/`: 板级 IO RTL，包括按键/开关输入处理、分频器、计数器、PS/2 键盘接收和 VGA 测试显示。
-- `edf_file/`: 当前仍在工程中使用的参考工程文件，包括 `MIO_BUS`、`Multi_8CH32`、`SSeg7`、`SPIO` 等 IO/显示/总线模块。
-- `archive/`: 已从当前工程移出的旧参考文件，仅作备份归档，不参与综合、实现或仿真。归档文件统一使用 `.bak` 后缀，避免 Vivado 递归添加目录时把旧同名模块当作源文件读入。
-- `coe/`: Vivado ROM/RAM IP 初始化文件。
-- `icf.xdc`: 管脚约束。
+## 功能与验收状态
 
-`ref/`、`asm2coe/` 和 `tmp/` 是本地参考/辅助内容，不进入 Git。
+| 项目 | 状态 |
+|---|---|
+| 37 条指令单周期 CPU | 已实现并上板通过 |
+| 37 条指令五级流水线 CPU | 已实现并上板通过 |
+| 旁路、load-use 暂停、静态分支预测 | 已实现并通过回归 |
+| 非法指令、`ecall`、计数中断 | 已实现并通过课程验收 |
+| PS/2 键盘数码管自检 | 已上板通过 |
+| VGA 色条和键盘方块自检 | 已上板通过 |
+| 完整倒水排序游戏 | 主机、RTL、真实 SCPU 整机仿真及课程验收全部通过 |
 
-## 顶层结构
+## 目录
 
-`top.v` 中的主要数据通路：
+- `top.v`：FPGA 顶层。
+- `code/`：CPU、访存控制和仿真测试。
+- `IO/`：键盘、游戏 MMIO、VGA 和板级 IO。
+- `edf_file/`：仍在工程中使用的参考外设模块。
+- `coe/`：ROM/RAM 初始化文件；完整游戏只使用 `water_sort_game_i.coe` 和 `water_sort_game_d.coe`。
+- `software/water_sort/`：可移植 C 游戏核心、测试和关卡生成器。
+- `software/water_sort/fpga/`：RV32I 裸机固件、启动代码、链接脚本和 COE 构建流程。
+- `icf.xdc`：当前唯一板级约束文件。
 
-```text
-ROM_D.spo              -> SCPU.inst_in
-SCPU.PC_out[11:2]      -> ROM_D.a
+`ref/` 和 `asm2coe/` 是本地参考资料，不属于最终 Vivado source set，也不进入 Git。
 
-SCPU.Addr_out[11:2]    -> RAM_B.addra
-SCPU.Data_out          -> dm_controller.Data_write
-RAM_B.douta            -> dm_controller.Data_read_from_dm
-dm_controller.Data_read -> SCPU.Data_in
-dm_controller.wea_mem   -> RAM_B.wea
-dm_controller.Data_write_to_dm -> RAM_B.dina
+## 游戏操作
+
+上电复位后进入菜单，默认选择 `NORMAL / LEVEL 01`。
+
+菜单：
+
+- `W/S` 或上下方向键：切换 EASY、NORMAL、HARD。
+- `A/D` 或左右方向键：循环选择 1～12 关。
+- 数字键：直接输入关卡号；Backspace 删除。
+- Enter 或 Space：开始游戏。
+
+游戏：
+
+- `A/D` 或左右方向键：移动光标。
+- Enter 或 Space：选择来源或执行倾倒。
+- Esc：取消选择。
+- `U`：撤销一步，可一直撤回开局，通关后也可撤销。
+- `R`：重开当前关。
+- `M`：返回菜单。
+
+EASY、NORMAL、HARD 分别使用 6/7/8 根试管和 4/6/7 种颜色。数码管显示步数，LED 显示光标，通关后 LED 全亮并显示 `YOU WIN`。
+
+## 构建与测试
+
+### 电脑端游戏核心
+
+```bash
+cd software/water_sort
+make test
+make run
 ```
 
-普通数据 RAM 访问不经过 `MIO_BUS`。`MIO_BUS` 只负责外设译码、显示相关数据和外设读数据返回；`top.v` 中 `MIO_BUS.ram_data_out` 固定接 `32'b0`，避免把 RAM `douta` 额外扇出到 MIO。
+`make test` 会重建并核对关卡目录，然后验证 36 个关卡、游戏规则、重开和撤销。关卡生成算法见 `software/water_sort/LEVEL_GENERATION.md`。
 
-## 键盘显示测试
+### FPGA 裸机固件
 
-`top.v` 提供 PS/2 键盘直连数码管测试模式：
+需要 RISC-V GNU 工具链，默认前缀为 `riscv64-unknown-elf-`：
 
-- `ps2_clk` 约束到 NEXYS4 A7-100T 的 `F4` 管脚。
-- `ps2_data` 约束到 NEXYS4 A7-100T 的 `B2` 管脚。
-- `SW15 = 1` 时，数码管显示最近一次按下键的 `{8'h00, ASCII, 8'h00, scan_code}`。
-- `SW15 = 0` 时，保持原来的 CPU/IO 数码管显示路径。
-
-该测试已在 NEXYS4 A7-100T 上板通过；后续游戏程序需要键盘输入时，可以复用 `IO/ps2_keyboard.v` 输出的扫描码接入 MMIO 或中断。
-
-## VGA 显示测试
-
-`top.v` 提供 VGA 直连测试输出，用于先验证显示器物理链路和键盘到画面的反馈：
-
-- 输出端口为 `vga_r[3:0]`、`vga_g[3:0]`、`vga_b[3:0]`、`vga_hs`、`vga_vs`。
-- 当前实现为纯 RTL `640x480@60Hz` 测试图，不经过 CPU、RAM 或 `MIO_BUS`。
-- 画面包含色条、白色边框和中心参考线，便于检查颜色顺序、同步和可视区域。
-- `SW14 = 1` 时叠加键盘控制方块，方向键或 WASD 可移动方块；`SW14 = 0` 时只显示固定测试图。
-- `SW15` 仍只控制数码管是否显示键盘值，不影响 VGA。
-
-VGA 管脚按 Digilent Nexys A7-100T master XDC 记录，兼容当前 Nexys4 A7-100T：
-
-```text
-vga_r[0..3] -> A3 B4 C5 A4
-vga_g[0..3] -> C6 A5 B6 A6
-vga_b[0..3] -> B7 C7 D7 D8
-vga_hs      -> B11
-vga_vs      -> B12
+```bash
+cd software/water_sort/fpga
+make
 ```
 
-该测试已在 NEXYS4 A7-100T 上板通过：`SW14 = 0` 时显示器稳定显示色条和参考线，`SW14 = 1` 时方向键/WASD 可移动方块。
+构建会生成：
 
-后续 C 语言小游戏显示建议在这条稳定 VGA 输出链路上扩展 tile/framebuffer/MMIO，不要先把完整显存设计和 VGA 物理调试混在一起。
+- `coe/water_sort_game_i.coe`：`ROM_D` 指令初始化。
+- `coe/water_sort_game_d.coe`：`RAM_B` 数据和关卡初始化。
+- `build/*.mem`：真实 SCPU 整机仿真镜像。
+- `build/water_sort_game.asm`：反汇编与 37 指令覆盖检查。
 
-## CPU 实现
+链接脚本限制 ROM/RAM 各 4 KiB，并至少保留 512 字节栈。最终中断版固件尺寸为 `.text` 3204 字节、`.rodata` 576 字节、`.bss` 2112 字节。
 
-`SCPU` 是 IF/ID、ID/EX、EX/MEM、MEM/WB 五级流水线实现：
+## Vivado 工程
 
-- 数据冒险通过 EX/MEM、MEM/WB 到 EX 阶段的旁路解决。
-- WB 到 ID 读寄存器有旁路，保留 `U_RF` 实例名，便于现有仿真层级访问。
-- store 写数据使用旁路后的 `rs2` 值。
-- 典型 load-use 冒险插入 1 个 bubble。
-- 控制冒险使用静态预测：`jal` 预测 taken；条件分支按立即数符号预测，后跳 taken、前跳 not taken；`jalr` 在 EX 阶段重定向；预测错误时 flush IF/ID 和 ID/EX。
-- `RF` 在下降沿写回，复位时 `x2` 初始化为 `0x00000400`。
+目标器件为 `xc7a100tcsg324-1`，顶层设为 `top`。
 
-板上时钟结构：
+Design Sources：
 
-- `SCPU.clk` 使用板载 100MHz `clk`，不直接使用 `clkdiv` 派生时钟。
-- `clk_div` 输出的 `Clk_CPU` 只用于在 `top.v` 中生成单周期 `cpu_en`，控制流水线推进速度。
-- 修改 `clk_div.v` 中 `Clk_CPU` 的分频位后，`cpu_en` 会自动跟随实际 `Clk_CPU` 上升沿，不需要同步改 `top.v`。
-- `RAM_B.clka` 和 IO 写寄存器采样时钟使用 `~clk`，保持 CPU/RAM/IO 时序关系稳定。
+- 顶层：`top.v`
+- CPU：`code/SCPU.v`、`RF.v`、`ctrl.v`、`ctrl_encode_def.v`、`alu.v`、`EXT.v`、`dm_controller.v`
+- IO：`IO/Counter_3_IO.v`、`Enter.v`、`clk_div.v`、`ps2_keyboard.v`、`keyboard_display.v`、`keyboard_control.v`、`keyboard_event_mmio.v`、`game_state_mmio.v`、`vga_timing.v`、`vga_test_pattern.v`、`vga_game_text.v`、`vga_game_pattern.v`、`vga_output_register.v`
+- 外设：`edf_file/MIO_BUS.V`、`Multi_8CH32.v/.edf`、`SPIO.v/.edf`、`SSeg7.v/.edf`
 
-## 存储器 IP 要求
+Constraints 只加入根目录 `icf.xdc`。
 
-指令 ROM：
+IP Sources：
 
-- 模块名：`ROM_D`
-- 地址：`a[9:0]`
-- 数据输出：`spo[31:0]`
+- `ROM_D`：32 位数据、10 位地址，初始化为 `coe/water_sort_game_i.coe`。
+- `RAM_B`：32 位数据、10 位地址、4 位字节写使能，初始化为 `coe/water_sort_game_d.coe`。
 
-数据 RAM：
+COE 不是 Design Source。替换 COE 后，对 `ROM_D` 和 `RAM_B` 执行 **Reset Output Products** 和 **Generate Output Products**，再重新综合、实现并生成 bitstream；不需要重新创建 IP。
 
-- 模块名：`RAM_B`
-- 地址：`addra[9:0]`
-- 时钟：`clka` 接 `~clk`
-- 写数据：`dina[31:0]`
-- 字节写使能：`wea[3:0]`
-- 读数据：`douta[31:0]`
+不要加入 `code/simulation/`、`code/dm.v`、`code/im.v`、`software/`、`ref/`、`asm2coe/` 或任何 `build/sim_out` 目录。
 
-切换 `.coe` 后，需要重新生成对应 IP 的 output products，然后重新综合、实现、生成 bitstream。
+## 上板步骤
 
-## Vivado 导入与上板
+1. 用最新两份游戏 COE 更新 ROM_D 和 RAM_B，并重新生成 output products。
+2. 检查顶层、Design Sources 和 `icf.xdc` 后生成 bitstream。
+3. 连接 VGA 显示器和 PS/2 键盘，通过 Hardware Manager 下载。
+4. 设置 `SW2=0`、`SW14=1`、`SW15=0`、`SW7:5=000`，然后复位。
+5. 确认进入 `WATER SORT` 菜单，并依次检查三档布局、选关、倾倒、撤销、重开、返回菜单和通关提示。
+6. 输入 0 或 13 以上应显示 `LEVEL INVALID`，不能开始。
+7. 将 `SW14=0` 检查 VGA 色条与键盘方块；将 `SW15=1` 检查原始键盘扫描码。
 
-在已有 Vivado 工程中，保留现有 `ROM_D`、`RAM_B` IP，执行 **Add Sources -> Add or Create Design Sources**，补齐下列文件；若文件已经存在于工程中，不要重复添加。
+若只显示空试管，先检查两份 COE 和 IP output products；若数码管能显示扫描码但游戏不响应，检查键盘中断版固件是否确实进入 ROM_D；若出现固定竖线，检查 RGB、HS、VS 是否仍统一经过 `vga_output_register`。
 
-1. 顶层：`top.v`，并在 **Settings -> General -> Top module name** 设为 `top`。
-2. CPU RTL：`code/SCPU.v`、`code/RF.v`、`code/ctrl.v`、`code/ctrl_encode_def.v`、`code/alu.v`、`code/EXT.v`、`code/dm_controller.v`。
-3. 板级 IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`。
-4. 参考外设模块：`edf_file/MIO_BUS.V`，以及 `edf_file/Multi_8CH32.v/.edf`、`edf_file/SPIO.v/.edf`、`edf_file/SSeg7.v/.edf`。
-5. 约束：在 **Add or Create Constraints** 中只加入当前的 `icf.xdc`，不要保留旧版或重复的 XDC。
+## 实现摘要
 
-以下文件仅用于仿真，不加入 **Design Sources**：`code/simulation/*`、`code/dm.v`、`code/im.v`。`archive/`、`ref/`、`asm2coe/`、`tmp/` 也不加入工程。
+键盘和显示链路为：
 
-`ROM_D` 与 `RAM_B` 是已有 Vivado IP：本次键盘/VGA/中断更新不需要修改或重新生成它们。只有新建空工程或更换 `.coe` 时，才创建/更新 IP：
+```text
+PS/2 -> 扫描码译码 -> 事件锁存 -> CPU 中断 -> C ISR
+                                        |
+                                        +-> 游戏状态 shadow/commit
+                                                |
+                                                +-> 帧边界 active 状态 -> VGA 实时渲染
+```
 
-- `ROM_D`：模块名 `ROM_D`，地址 `a[9:0]`，数据输出 `spo[31:0]`。
-- `RAM_B`：模块名 `RAM_B`，地址 `addra[9:0]`，数据 `dina/douta[31:0]`，字节写使能 `wea[3:0]`，时钟 `clka`。
+键盘 `key_ready` 和计数器请求在顶层合并到 CPU 的单个 `INT`。trap 入口保存/恢复整数寄存器，C ISR 读取事件、更新游戏、提交画面并 ACK，主循环不轮询键盘。
 
-导入完成后依次运行 **Synthesis**、**Implementation**、**Generate Bitstream**。上板时接好 VGA 和 PS/2 键盘，下载 bitstream 后：
+CPU 只发布试管和 UI 状态；VGA 根据当前像素坐标实时绘制。`COMMIT` 先固定 pending 快照，再在下一 `frame_tick` 整体切换 active 状态，避免画面撕裂。最终 RGB、HS、VS 经过输出寄存器后连接管脚，避免组合译码毛刺。
 
-- `SW14 = 0`：确认 VGA 色条、白色边框和中心线稳定显示。
-- `SW14 = 1`：用方向键或 WASD 移动 VGA 方块。
-- `SW15 = 1`：数码管显示最近一次键盘按下值；`SW15 = 0`：恢复原 CPU/IO 数码管显示。
+## 开发日志
 
-不要把 `archive/` 加入 Vivado source set。里面是旧的 `MIO_BUS`、`SCPU`、`dm_controller` 参考实现，只用于备份。
+- Step 1：完成电脑端纯 C 游戏规则和测试。
+- Step 2：完成键盘事件 MMIO、裸机启动、链接和双 COE 构建。
+- Step 3：完成 CPU 到 VGA 的 shadow/commit 状态链路。
+- Step 4：完成试管、液体、光标和选中状态渲染。
+- Step 5：完成固定关卡的完整游戏固件与整机仿真。
+- Step 6：完成三档难度、36 个 BFS 验证关卡、2048 步撤销、菜单和文字 UI。
+- Step 7：将键盘输入改为机器模式中断；trap 保存/恢复现场并调用 C ISR，真实 SCPU 完整交互仿真通过。
+- 最终整理：课程验收全部通过；移除阶段性诊断固件、旧备份模块和生成产物，统一交付文档与验证入口。
 
-## 版本标记
-
-- `single-cycle-v1`: 合并流水线前的单周期 CPU 版本。
-- `pipeline-v1`: 当前通过板上 `testac.coe` 的五级流水线 CPU 版本。
-
-## `dm_controller`
-
-`dm_controller` 处理 CPU 的 load/store 访存格式：
-
-- word：直接读写 32 位。
-- halfword：按 `Addr_in[1]` 选择高/低 16 位，并做符号扩展。
-- halfword unsigned：按 `Addr_in[1]` 选择高/低 16 位，并做零扩展。
-- byte：按 `Addr_in[1:0]` 选择字节，并做符号扩展。
-- byte unsigned：按 `Addr_in[1:0]` 选择字节，并做零扩展。
-
-写内存时，`Data_write_to_dm` 负责把待写数据放到正确字节 lane，`wea_mem[3:0]` 负责只写对应字节。
+历史标签：`single-cycle-v1`、`pipeline-v1`、`interrupt-v1`。

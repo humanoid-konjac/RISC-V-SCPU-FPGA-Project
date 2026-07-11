@@ -1,46 +1,35 @@
 # AGENTS.md
 
-本文件给后续在本目录工作的代码代理使用。回复使用中文。
+本文件用于维护最终交付版本。后续代理必须使用中文回复，并在修改前阅读当前文件和相关源代码。
 
-## 项目结构
+## 项目基线
 
+- 分支：`game`
+- 板卡：Nexys4 A7-100T，器件 `xc7a100tcsg324-1`
 - 顶层：`top.v`
-- CPU RTL：`code/`
-- 板级 IO：`IO/`
-- 参考工程模块：`edf_file/`
-- COE 文件：`coe/`
-- 管脚约束：`icf.xdc`
-- 以前的文档归档：`archive/`
-- 参考的外部信息：`ref/`
-  PS2 接口参考文件和 VGA 接口参考文件在 `ref/` 目录下
-- 当前 CPU 状态：五级流水线 `SCPU`
+- CPU：自研 RV32I 五级流水线 `SCPU`
+- 应用：36 关倒水排序游戏
+- 输入：PS/2 键盘事件触发机器模式中断
+- 输出：`640×480@60Hz` VGA、LED、数码管
+- 存储：`ROM_D` 与 `RAM_B` 均为 1024×32
 
-## 背景与当前进度
+最终交付状态：单周期、流水线、中断/异常、键盘、VGA 和中断驱动完整游戏均已完成课程验收；主机、RTL 与真实 SCPU 回归也已通过。
 
-这是计算机系统综合设计课程的实验项目。
+## 目录职责
 
-实验要求与实现评分标准：
+- `code/`：CPU RTL、访存控制和仿真。
+- `IO/`：板级输入输出、键盘事件、游戏状态和 VGA。
+- `edf_file/`：当前仍使用的参考外设。
+- `coe/`：课程测试和最终游戏初始化文件。
+- `software/water_sort/`：可移植游戏核心、测试和关卡生成器。
+- `software/water_sort/fpga/`：裸机固件。
+- `icf.xdc`：唯一有效约束。
 
-1. 支持37条指令单周期CPU下板实验并运行测试程序。（已经实现并上板测试通过）
-2. 支持37条指令冒险流水线CPU下板实验并成功运行测试程序。
-   说明：数据冒险要求用旁路解决，控制冒险要求用静态预测解决。（已经实现并上板测试通过）
-3. 在冒险流水线CPU上实现一个应用并显示效果，应用程序要求包含有实现的37条指令。（跳过，包含于后面的点）
-4. 在流水线CPU上实现三种单级中断/异常：异常指令、计数中断和系统调用syscall。（已经实现，待上板测试）
-5. 键盘连接后在数码管显示按键值的上板测试路径。（已经实现并上板测试通过）
-6. VGA 显示输出和键盘控制方块的上板测试路径。（已经实现并上板测试通过）
-7. 在流水线CPU上实现复杂的应用。（最终目标）
+不得重新加入已删除的 `archive/`、Step 3 诊断固件或 `game_phase3_*.coe`。构建目录、波形、Vivado 输出和 `.DS_Store` 不得提交。
 
-## 实现要求
+## 不可破坏的连接
 
-### 基本要求
-
-所有直接进入项目的文件都必须放在对应功能的目录下，不能保留在其他目录来引用。
-
-每次完成修改或新增文件后，必须检查对应的文档（README.md 和 AGENTS.md）是否需要更新或记录当前的实现进度。
-
-### 当前正确连接
-
-普通数据 RAM 通路必须是：
+普通数据 RAM 必须保持直连：
 
 ```text
 SCPU Addr_out[11:2] -> RAM_B.addra
@@ -51,108 +40,124 @@ dm_controller.Data_write_to_dm -> RAM_B.dina
 dm_controller.wea_mem -> RAM_B.wea
 ```
 
-`MIO_BUS` 只用于外设译码、显示和外设读数据返回。
+- `MIO_BUS` 只负责旧外设，不得接管 RAM。
+- RAM 地址 `0x00000000～0x00000fff` 与 `0x10000000～0x10000fff` 是同一物理 RAM 的别名，均使用 `Addr_out[11:2]`。
+- 游戏 MMIO 为 `0xd0000000～0xd0000fff`，不得打开 RAM 写使能。
+- 游戏 MMIO 写使能必须是 `cpu_en && mem_w && game_access`，避免 CPU 暂停期间重复 ACK 或 COMMIT。
+- `RAM_B.clka` 和旧 IO 写寄存器继续使用 `~clk`。
 
-### 板级接口备忘
+## CPU 与中断约束
 
-板卡为 NEXYS4 A7-100T / `xc7a100tcsg324-1`。VGA 管脚来自 Digilent Nexys A7-100T master XDC：
+- 流水级为 IF/ID、ID/EX、EX/MEM、MEM/WB。
+- 保留 EX/MEM、MEM/WB 到 EX 的旁路，WB 到 ID 的旁路和 store 数据旁路。
+- load-use 插入一个 bubble。
+- 静态预测：`jal` taken；条件分支后跳 taken、前跳 not taken；`jalr` 在 EX 重定向；错误时 flush IF/ID 与 ID/EX。
+- `RF` 下降沿写回，实例名必须为 `U_RF`。
+- `SCPU.clk` 接 100 MHz，流水线只由 `SCPU.en` 推进。
+- `cpu_en` 必须由实际 `Clk_CPU` 上升沿检测产生，不得硬编码某一 `clkdiv` 位。
+
+CPU实现非法指令、`ecall` 和计数中断，使用 `mstatus/mie/mtvec/mepc/mcause`。键盘 `key_ready` 上升沿和 `counter0_OUT` 上升沿在顶层合并到单个 `INT`。
+
+最终游戏必须保持中断驱动：
+
+- `startup.S` 设置 `mtvec`，开启 `mstatus.MIE` 和 `mie.MTIE`。
+- `trap_entry` 保存/恢复除 `x0/sp` 外的整数寄存器并以 `mret` 返回。
+- `keyboard_interrupt_handler` 读取 `KEY_CODE`、更新状态、提交画面并写 `KEY_ACK`。
+- 主循环不得重新轮询 `KEY_STATUS`。
+
+## 游戏与 MMIO
+
+最终参数：
+
+| 难度 | 颜色 | 空管 | 有效管 | 关卡 |
+|---|---:|---:|---:|---:|
+| EASY | 4 | 2 | 6 | 12 |
+| NORMAL | 6 | 1 | 7 | 12 |
+| HARD | 7 | 1 | 8 | 12 |
+
+每次合法倾倒用 1 字节记录来源、目标和层数，历史容量 2048；历史满后拒绝新倾倒，以保证可以撤回开局。
+
+游戏 MMIO：
+
+| 地址 | 含义 |
+|---|---|
+| `0xd0000000` | KEY_STATUS |
+| `0xd0000004` | KEY_CODE |
+| `0xd0000008` | KEY_ACK |
+| `0xd0000020～0xd000003c` | 8 根试管 shadow 状态 |
+| `0xd0000040` | UI shadow |
+| `0xd0000044` | 步数 shadow |
+| `0xd0000048` | COMMIT |
+| `0xd000004c` | 难度、管数和步数 BCD |
+| `0xd0000050` | 两位 BCD 关卡号 |
+
+游戏画面必须保持 `shadow -> pending -> active`：COMMIT 固定 pending，`frame_tick` 时整体切换 active。
+
+## VGA 与板级接口
+
+- 100 MHz 时钟产生 25 MHz `pixel_tick` 使能，不创建新的全局派生时钟。
+- 时序为水平 `640/16/96/48`、垂直 `480/10/2/33`。
+- `SW14=0` 为色条/键盘方块自检，`SW14=1` 为游戏。
+- RGB、HS、VS 必须在画面选择后统一经过 `vga_output_register`，不得直接输出组合像素逻辑。
+- `SW15=1` 显示 `{8'h00, ASCII, 8'h00, scan_code}`，`SW15=0` 恢复 CPU/IO 显示。
+
+PS/2：`ps2_clk=F4`、`ps2_data=B2`，均为 LVCMOS33 并启用 PULLUP。
+
+VGA：
 
 ```text
-https://github.com/Digilent/digilent-xdc/blob/master/Nexys-A7-100T-Master.xdc
+R: A3 B4 C5 A4
+G: C6 A5 B6 A6
+B: B7 C7 D7 D8
+HS: B11
+VS: B12
 ```
 
-Digilent 说明 Nexys4 DDR 到 Nexys A7 没有需要修改 master XDC 的变化，所以该管脚表适用于当前板子。
+## Vivado source set
 
-本地参考资料：
-
-- PS/2：`ref/PS2接口/PS2KB.v`、`ref/PS2接口/PS2IO.v`
-- VGA：`ref/VGA接口/VGA_Scan.v`、`ref/VGA接口/VGAIO.v`
-
-PS/2 约束：
-
-```text
-ps2_clk  -> F4, IOSTANDARD LVCMOS33, PULLUP true
-ps2_data -> B2, IOSTANDARD LVCMOS33, PULLUP true
-```
-
-VGA 约束全部使用 `IOSTANDARD LVCMOS33`：
-
-```text
-vga_r[0] -> A3
-vga_r[1] -> B4
-vga_r[2] -> C5
-vga_r[3] -> A4
-vga_g[0] -> C6
-vga_g[1] -> A5
-vga_g[2] -> B6
-vga_g[3] -> A6
-vga_b[0] -> B7
-vga_b[1] -> C7
-vga_b[2] -> D7
-vga_b[3] -> D8
-vga_hs    -> B11
-vga_vs    -> B12
-```
-
-### 键盘显示测试
-
-- NEXYS4 A7-100T 的 PS/2 端口约束为 `ps2_clk -> F4`、`ps2_data -> B2`。
-- `SW15 = 1` 时，数码管显示最近一次按下键的 `{8'h00, ASCII, 8'h00, scan_code}`；`SW15 = 0` 时保持原 CPU/IO 显示。
-- 当前键盘测试已在 NEXYS4 A7-100T 上板通过，是硬件直连显示，不经过 CPU、RAM 或 `MIO_BUS`；后续游戏需要键盘输入时再接入 MMIO 或中断。
-
-### VGA 显示测试
-
-- 顶层 VGA 端口为 `vga_r[3:0]`、`vga_g[3:0]`、`vga_b[3:0]`、`vga_hs`、`vga_vs`。
-- 当前 VGA 第一阶段是纯 RTL 自检，不接 CPU MMIO，不经过 RAM 或 `MIO_BUS`。
-- VGA 使用 100MHz `clk` 产生 25MHz `pixel_tick` 使能，不新增全局派生时钟。
-- 当前时序为 `640x480@60Hz`：水平 `640/16/96/48`，垂直 `480/10/2/33`。
-- `SW14 = 1` 叠加键盘控制方块，方向键或 WASD 控制移动；`SW14 = 0` 只显示固定色条/边框/中心线。
-- 后续游戏建议复用这条 VGA 输出链路，再新增 tile/framebuffer/MMIO；键盘状态可通过 MMIO 或中断机制接入 CPU。
-
-### Vivado 导入清单
-
-设计源必须包含：
+必须加入：
 
 - `top.v`
-- CPU：`code/SCPU.v`、`code/RF.v`、`code/ctrl.v`、`code/ctrl_encode_def.v`、`code/alu.v`、`code/EXT.v`、`code/dm_controller.v`
-- IO：`IO/Counter_3_IO.v`、`IO/Enter.v`、`IO/clk_div.v`、`IO/ps2_keyboard.v`、`IO/keyboard_display.v`、`IO/keyboard_control.v`、`IO/vga_timing.v`、`IO/vga_test_pattern.v`
-- 外设：`edf_file/MIO_BUS.V`，以及 `edf_file/Multi_8CH32.v/.edf`、`edf_file/SPIO.v/.edf`、`edf_file/SSeg7.v/.edf`
-- 约束：只使用当前 `icf.xdc`
-- IP：保留现有 `ROM_D` 和 `RAM_B`，本次不修改或重新生成
+- `code/SCPU.v`、`RF.v`、`ctrl.v`、`ctrl_encode_def.v`、`alu.v`、`EXT.v`、`dm_controller.v`
+- `IO/Counter_3_IO.v`、`Enter.v`、`clk_div.v`、`ps2_keyboard.v`、`keyboard_display.v`、`keyboard_control.v`、`keyboard_event_mmio.v`、`game_state_mmio.v`、`vga_timing.v`、`vga_test_pattern.v`、`vga_game_text.v`、`vga_game_pattern.v`、`vga_output_register.v`
+- `edf_file/MIO_BUS.V`、`Multi_8CH32.v/.edf`、`SPIO.v/.edf`、`SSeg7.v/.edf`
+- 约束只使用 `icf.xdc`
 
-`code/simulation/*`、`code/dm.v`、`code/im.v` 只用于仿真；`archive/`、`ref/`、`asm2coe/`、`tmp/` 不加入 Vivado 工程。完成导入后设置顶层为 `top`，依次执行综合、实现和生成 bitstream。
+不要加入 `code/simulation/`、`code/dm.v`、`code/im.v`、`software/`、`ref/`、`asm2coe/`、构建目录或 COE 文件本身。
 
-### 流水线与时钟约束
+IP 名称和端口：
 
-- `SCPU` 是 IF/ID、ID/EX、EX/MEM、MEM/WB 五级流水线。
-- 数据冒险主要靠旁路解决：EX/MEM、MEM/WB 到 EX，WB 到 ID，store 写数据使用旁路后的 `rs2`。
-- load-use 冒险插入 1 个 bubble。
-- 控制冒险使用静态预测：`jal` taken；条件分支后跳 taken、前跳 not taken；`jalr` 在 EX 阶段重定向；预测错误 flush IF/ID 与 ID/EX。
-- `RF` 下降沿写回，实例名必须保留为 `U_RF`。
-- `SCPU.clk` 接板载 100MHz `clk`，流水线推进由 `SCPU.en` 控制。
-- `top.v` 中 `cpu_en` 必须由实际 `Clk_CPU` 的上升沿检测生成，不要硬编码 `clkdiv[n]` 位。
-- `clk_div.v` 可以调整 `Clk_CPU` 的分频位；调整后不应再同步修改 `top.v` 的 `cpu_en` 逻辑。
-- `RAM_B.clka` 和 IO 写寄存器采样时钟保持接 `~clk`。
+- `ROM_D`：`a[9:0]`、`spo[31:0]`
+- `RAM_B`：`addra[9:0]`、`dina/douta[31:0]`、`wea[3:0]`、`clka`
 
-### IP 名称要求
+最终初始化只使用 `water_sort_game_i.coe` 和 `water_sort_game_d.coe`。更换 COE 后重新生成 output products，不要重建或改名 IP。
 
-- 指令 ROM 模块名：`ROM_D`
-- 数据 RAM 模块名：`RAM_B`
-- CPU 模块名：`SCPU`
-- 访存控制模块名：`dm_controller`
+## 固件约束
 
-`RAM_B` 需要 32 位数据、10 位地址、4 位字节写使能。
+- 编译目标必须是 RV32I/ILP32、freestanding、无标准库。
+- `.text` 放 ROM；`.rodata/.data/.bss/stack` 放 RAM。
+- 关卡目录位于数据 RAM，不能放指令 ROM 后再用普通 load 读取。
+- ROM/RAM 各不得超过 4 KiB，并保留至少 512 字节栈。
+- `isa_coverage.S` 必须保留，以保证最终应用镜像包含课程要求的 37 条指令。
+- 当前尺寸：`.text` 3204、`.rodata` 576、`.bss` 2112 字节。
 
-### 版本标记
+## 修改和验证流程
 
-- `single-cycle-v1`：流水线合并前的单周期版本。
-- `pipeline-v1`：通过板上 `testac.coe` 的五级流水线版本。
-- `interrupt-v1`：包含单级中断/异常、PS/2 键盘和 VGA 上板测试的当前版本。
+1. 修改前查看当前端口和实例名，不按记忆改 RTL。
+2. 修改文件后同步检查根 README、AGENTS 和对应子目录 README。
+3. 运行 `git diff --check`，确认无生成产物被跟踪。
+4. 运行电脑端 `make test`。
+5. 构建 FPGA 固件并检查尺寸与反汇编。
+6. 运行受影响的模块测试、37 指令、中断异常和真实 SCPU 固件测试。
+7. 能运行 `iverilog` 时必须完成顶层展开；Vivado IP 使用仿真 stub 或官方模型。
 
-### 修改原则
+不得用测试通过代替上板结论。文档必须明确区分“RTL/整机仿真通过”和“已上板通过”。
 
-- 改 RTL 前先看当前端口名和实例名，不要按记忆改。
+## 开发记录
 
-### 建议验证
+- Step 1～5：纯 C 规则、键盘 MMIO、VGA 状态链、试管渲染和完整固定关卡游戏。
+- Step 6.1～6.6：动态难度、36 个 BFS 验证关卡、2048 步撤销、菜单、5×7 字库和可复现生成器。
+- Step 7：键盘输入改为机器模式中断，trap 完整保存/恢复现场，C ISR 处理事件；真实 SCPU 整机仿真及课程验收通过。
+- 最终整理：课程要求全部验收通过；移除阶段性固件、旧备份和生成产物，根 README 聚焦使用与交付，维护细节集中在本文件。
 
-能跑 `iverilog` 时，必须至少做顶层展开检查。若使用 Vivado IP，仿真环境需要对应 IP 仿真模型或 stub。
+版本标签：`single-cycle-v1`、`pipeline-v1`、`interrupt-v1`。
